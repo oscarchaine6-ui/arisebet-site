@@ -712,7 +712,7 @@ body{
 <div class="toast" id="toast"></div>
 
 <!-- CONNEXION GOOGLE -->
-<div class="auth-gate show" id="authGate">
+<div class="auth-gate" id="authGate">
   <div class="auth-box">
     <div class="auth-logo" role="img" aria-label="Arisebet"></div>
     <div class="auth-title">Connecte-toi pour accéder à Arisebet</div>
@@ -1078,9 +1078,17 @@ function initials(name){
 
 /* ---------------------------------------------------------
    VISUELS AUTO : logo de club / photo de joueur pour chaque match
-   Source : TheSportsDB (base gratuite, sans clé requise pour la recherche)
-   Résultat mis en cache (mémoire + localStorage) ; si rien n'est trouvé,
-   on retombe silencieusement sur le rond avec les initiales.
+   Source principale : TheSportsDB (base gratuite, sans clé requise).
+   File d'attente avec concurrence limitée : quand beaucoup de cartes
+   se chargent d'un coup (liste de compétition), tirer 20+ requêtes en
+   simultané sur une clé publique partagée déclenche des limites de
+   débit et fait échouer silencieusement la plupart des recherches —
+   d'où des logos manquants même pour des clubs connus. On limite donc
+   à quelques requêtes en vol à la fois, avec un petit espacement.
+   Deuxième essai avec un nom simplifié (sans FC/CF/United...) si la
+   recherche exacte ne trouve rien. Résultat mis en cache (mémoire +
+   localStorage) ; si rien n'est trouvé, on retombe sur le rond avec
+   les initiales.
 --------------------------------------------------------- */
 const visualCache = safeGet("arisebet_visual_cache_v1", {});
 let visualCacheDirty = false;
@@ -1089,10 +1097,39 @@ function persistVisualCacheSoon(){
   visualCacheDirty = true;
   setTimeout(()=>{ safeSet("arisebet_visual_cache_v1", visualCache); visualCacheDirty = false; }, 400);
 }
-async function fetchTeamVisual(name, sport){
-  const key = sport+"::"+name.toLowerCase().trim();
-  if(key in visualCache) return visualCache[key];
-  const individual = !!(SPORT_META[sport] && SPORT_META[sport].individual);
+const visualQueue = [];
+let visualQueueRunning = 0;
+const VISUAL_QUEUE_MAX = 3;
+function scheduleVisualFetch(task){
+  return new Promise((resolve)=>{
+    visualQueue.push({task, resolve});
+    pumpVisualQueue();
+  });
+}
+function pumpVisualQueue(){
+  while(visualQueueRunning < VISUAL_QUEUE_MAX && visualQueue.length){
+    const job = visualQueue.shift();
+    visualQueueRunning++;
+    job.task().then(job.resolve).catch(()=>job.resolve(null)).finally(()=>{
+      visualQueueRunning--;
+      setTimeout(pumpVisualQueue, 150);
+    });
+  }
+}
+function simplifyTeamName(name){
+  return (name||"")
+    .replace(/\b(FC|CF|SC|AC|AS|RC|CD|AFC|BC|SSC|United|Utd|Club|Calcio|CFC)\b/gi, "")
+    .replace(/\s+/g," ").trim();
+}
+async function lookupTeamBadge(name){
+  try{
+    const resp = await fetch("https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t="+encodeURIComponent(name));
+    const data = await resp.json();
+    const t = data && data.teams && data.teams[0];
+    return (t && (t.strTeamBadge || t.strTeamLogo)) || null;
+  }catch(e){ return null; }
+}
+async function lookupTeamVisual(name, individual){
   let url = null;
   try{
     if(individual){
@@ -1101,22 +1138,30 @@ async function fetchTeamVisual(name, sport){
       const p = data && data.player && data.player[0];
       url = (p && (p.strThumb || p.strCutout)) || null;
     }
+    if(!url) url = await lookupTeamBadge(name);
     if(!url){
-      const resp = await fetch("https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t="+encodeURIComponent(name));
-      const data = await resp.json();
-      const t = data && data.teams && data.teams[0];
-      url = (t && (t.strTeamBadge || t.strTeamLogo)) || null;
+      const simplified = simplifyTeamName(name);
+      if(simplified && simplified.toLowerCase() !== name.trim().toLowerCase()) url = await lookupTeamBadge(simplified);
     }
   }catch(e){ url = null; }
+  return url;
+}
+async function fetchTeamVisual(name, sport){
+  const key = sport+"::"+name.toLowerCase().trim();
+  if(key in visualCache) return visualCache[key];
+  const individual = !!(SPORT_META[sport] && SPORT_META[sport].individual);
+  const url = await scheduleVisualFetch(()=>lookupTeamVisual(name, individual));
   visualCache[key] = url;
   persistVisualCacheSoon();
   return url;
 }
 // Remplace un rond "initiales" par le vrai logo/photo dès qu'il est trouvé,
 // sans jamais bloquer l'affichage initial (les initiales s'affichent tout de suite).
-function attachTeamVisual(el, name, sport){
+// knownLogoUrl : si l'appelant a déjà un logo sous la main (ex: ESPN via le
+// classement), on l'utilise directement sans repasser par TheSportsDB.
+function attachTeamVisual(el, name, sport, knownLogoUrl){
   if(!el) return;
-  fetchTeamVisual(name, sport).then(url=>{
+  const applyImg = (url)=>{
     if(!url || !el.isConnected) return;
     const img = document.createElement("img");
     img.src = url;
@@ -1124,7 +1169,9 @@ function attachTeamVisual(el, name, sport){
     img.style.cssText = "width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#fff;padding:6px;box-sizing:border-box;";
     img.onerror = ()=>{};
     img.onload = ()=>{ el.textContent = ""; el.appendChild(img); };
-  });
+  };
+  if(knownLogoUrl){ applyImg(knownLogoUrl); return; }
+  fetchTeamVisual(name, sport).then(applyImg);
 }
 
 /* ---------------------------------------------------------
@@ -1818,7 +1865,11 @@ ${o.drawProb ? `- Match nul : ${o.drawProb}% de probabilité implicite\n` : ""}-
 ${o.avgOverround!=null ? `- Marge moyenne du marché (overround) : ${o.avgOverround}% ${o.avgOverround>=8 ? "(marché flou/peu liquide)" : "(dans la norme)"}\n` : ""}- Indice de confiance ${teamA} : ${o.confidenceA}/100 · ${teamB} : ${o.confidenceB}/100 (combine nombre de bookmakers et accord entre eux — sous 30, traite le chiffre avec prudence)
 ${o.outlierA ? `- ⚠️ La meilleure cote côté ${teamA} est une cote ISOLÉE (nettement au-dessus des autres bookmakers) — ressemble plus à une erreur de prix qu'à une vraie bonne affaire, à ne pas présenter comme un value bet fiable.\n` : ""}${o.outlierB ? `- ⚠️ La meilleure cote côté ${teamB} est une cote ISOLÉE (nettement au-dessus des autres bookmakers) — ressemble plus à une erreur de prix qu'à une vraie bonne affaire, à ne pas présenter comme un value bet fiable.\n` : ""}${o.bestTeamA ? `- Meilleure cote repérée pour ${teamA} : ${o.bestTeamA.price} chez ${o.bestTeamA.book}\n` : ""}${o.bestTeamB ? `- Meilleure cote repérée pour ${teamB} : ${o.bestTeamB.price} chez ${o.bestTeamB.book}\n` : ""}${o.valueBets && o.valueBets.length ? `- Value bet(s) 1X2 détecté(s) : ${o.valueBets.map(v=>`${v.team} @ ${v.price} chez ${v.book} (EV estimée +${v.evPercent}%)`).join(" ; ")}\n` : "- Aucun value bet 1X2 net détecté.\n"}${o.spread ? `- Handicap, ligne la plus couverte : ${teamA} ${o.spread.pointA>0?"+":""}${o.spread.pointA} / ${teamB} ${o.spread.pointB>0?"+":""}${o.spread.pointB} — probabilités dévigées ${o.spread.teamAProb}% / ${o.spread.teamBProb}% sur ${o.spread.bookmakerCount} bookmaker${o.spread.bookmakerCount>1?"s":""}.${o.spread.bestA?` Meilleure cote ${teamA} : ${o.spread.bestA.price} chez ${o.spread.bestA.book}.`:""}${o.spread.bestB?` Meilleure cote ${teamB} : ${o.spread.bestB.price} chez ${o.spread.bestB.book}.`:""}${o.spread.valueBets && o.spread.valueBets.length ? ` Value bet(s) handicap : ${o.spread.valueBets.map(v=>`${v.side==="A"?teamA:teamB} @ ${v.price} chez ${v.book} (+${v.evPercent}%)`).join(" ; ")}.` : " Aucun edge net sur le handicap."}\n` : "- Pas de données de handicap disponibles pour ce match.\n"}${formData && formData.teamA && formData.teamB ? `- ${rankLabel} ${teamA} : ${formData.teamA.record||"n/d"}${formData.teamA.streak?` (série ${formData.teamA.streak})`:""}\n- ${rankLabel} ${teamB} : ${formData.teamB.record||"n/d"}${formData.teamB.streak?` (série ${formData.teamB.streak})`:""}\n` : `- ${rankLabel}/forme indisponible pour cette compétition (utilise ta connaissance générale si tu en as une).\n`}
 IMPORTANT (classement) : si les données de classement ci-dessus contredisent le favori du marché, dis-le EXPLICITEMENT dans le résumé et pèse-le dans ton verdict — un favori du marché qui a un moins bon bilan que son adversaire est un signal d'alerte, pas un détail à ignorer.
-${sport === "tennis" ? `IMPORTANT (surface) : ${surface ? `la rencontre se joue sur "${surface}" — mobilise ta connaissance générale du style de jeu de chaque joueur sur cette surface précise (certains joueurs sont nettement plus forts sur terre battue, gazon ou dur) et dis explicitement si la surface favorise un camp différent du favori du marché.` : "la surface n'est pas connue pour ce match — ne l'invente pas, dis simplement que ce facteur n'a pas pu être pris en compte."}\n` : ""}IMPORTANT (historique) : mobilise ta connaissance générale des confrontations directes passées entre ${teamA} et ${teamB} (qui mène, matchs marquants récents). Si tu n'as pas cette information en mémoire avec certitude, dis-le clairement plutôt que d'inventer un score ou un nombre de victoires précis.
+${sport === "tennis" ? `IMPORTANT (surface) : ${surface ? `la rencontre se joue sur "${surface}" — mobilise ta connaissance générale du style de jeu de chaque joueur sur cette surface précise (certains joueurs sont nettement plus forts sur terre battue, gazon ou dur) et dis explicitement si la surface favorise un camp différent du favori du marché.` : "la surface n'est pas connue pour ce match — ne l'invente pas, dis simplement que ce facteur n'a pas pu être pris en compte."}\n` : ""}IMPORTANT (historique) : mobilise ta connaissance générale des confrontations directes passées entre ${teamA} et ${teamB} — pas juste "qui mène au H2H", mais aussi la tendance récente (les 3-5 dernières rencontres vont-elles dans le même sens ou le rapport de force a-t-il changé ?), le contexte de ces matchs (compétition, enjeu) si tu le sais, et tout schéma répété pertinent (l'un des deux domine-t-il systématiquement à domicile, ou sur ce type de rencontre ?). Si tu n'as pas cette information en mémoire avec certitude, dis-le clairement plutôt que d'inventer un score ou un nombre de victoires précis.
+
+IMPORTANT (synthèse) : ton "resume" ne doit JAMAIS traiter marché / classement / historique / surface comme des paragraphes séparés et cloisonnés — croise-les explicitement. Exemple du niveau attendu : si le marché favorise A, mais que le classement favorise B ET que l'historique récent favorise aussi B, dis-le comme un faisceau d'indices cohérent ("le marché mise sur A, mais le classement ET l'historique récent penchent pour B — ce n'est pas un détail isolé, deux signaux indépendants vont dans le même sens"), pas comme trois phrases juxtaposées sans lien entre elles. À l'inverse, si tous les signaux (marché, classement, historique) pointent dans la même direction, dis-le aussi explicitement — c'est un signal de confiance plus fort qu'un simple favori de marché isolé. C'est ce croisement qui doit guider "pronostic", "confiance" et "verdict", pas un seul facteur pris isolément.
+RAPPEL FINAL avant de répondre : le champ "pronostic" n'est PAS censé être automatiquement le favori du marché — relis les données de classement/forme ci-dessus et l'historique des confrontations, et choisis le camp que TOI tu penses réellement le plus susceptible de gagner en tenant compte de tout (classement, historique, edge détecté), pas juste la probabilité de marché la plus haute. Si le classement et l'historique penchent nettement pour l'outsider, ton pronostic doit pouvoir être l'outsider — ça doit arriver régulièrement, pas être un cas théorique.
+
 Réponds UNIQUEMENT avec un objet JSON, exactement dans ce format, sans texte autour :
 {
   "pronostic": "<exactement la chaîne '${teamA}', '${teamB}', ou 'Match nul'>",
@@ -1861,13 +1912,27 @@ Réponds UNIQUEMENT avec un objet JSON, exactement dans ce format, sans texte au
   if(historique) facteurs.push(`📊 Historique face-à-face : ${historique}`);
   if(surface) facteurs.push(`🎾 Surface de la rencontre : ${surface}`);
 
+  // Le classement/la forme (ESPN) est toujours affiché, qu'il soit ou non
+  // repris dans le texte de l'IA — pour que ce soit clair et fiable, pas
+  // seulement mentionné en passant dans le résumé.
+  const forme = (formData && formData.teamA && formData.teamB) ? {
+    rankLabel,
+    teamA: {record: formData.teamA.record || "n/d", streak: formData.teamA.streak || "", logo: formData.teamA.logo || null},
+    teamB: {record: formData.teamB.record || "n/d", streak: formData.teamB.streak || "", logo: formData.teamB.logo || null},
+  } : null;
+  if(forme){
+    facteurs.unshift(`📈 ${forme.rankLabel} — ${teamA} : ${forme.teamA.record}${forme.teamA.streak?` (série ${forme.teamA.streak})`:""} · ${teamB} : ${forme.teamB.record}${forme.teamB.streak?` (série ${forme.teamB.streak})`:""}`);
+  } else {
+    facteurs.unshift(`📈 ${rankLabel} indisponible pour cette compétition.`);
+  }
+
   return {
     id: Date.now()+"_"+Math.floor(Math.random()*9999),
     teamA, teamB, sport, compName, compOddsKey: findOddsKeyForTeams(teamA, teamB, sport), eventId: eventId || null,
     resume: String(ai.resume || ""), confiance,
     pronostic, resultatProbable: "",
     marches: Array.isArray(ai.marches) ? ai.marches : [],
-    facteurs, historique, surface: surface || null,
+    facteurs, historique, surface: surface || null, forme,
     verdict, conseil: String(ai.conseil || ""),
     ts: new Date().toISOString(),
     oddsSnapshot: o,
@@ -2012,6 +2077,11 @@ function buildOddsRecord(teamA, teamB, sport, compName, eventId, o, formData, su
   } else {
     facteurs.push(`${rankLabel} indisponible pour cette compétition — cette analyse de secours (sans IA) ne peut pas compenser cette absence.`);
   }
+  const forme = (formData && formData.teamA && formData.teamB) ? {
+    rankLabel,
+    teamA: {record: formData.teamA.record || "n/d", streak: formData.teamA.streak || "", logo: formData.teamA.logo || null},
+    teamB: {record: formData.teamB.record || "n/d", streak: formData.teamB.streak || "", logo: formData.teamB.logo || null},
+  } : null;
 
   // Surface et historique face-à-face : l'analyse de secours ne calcule
   // rien à partir des cotes seules pour ces deux facteurs (elle n'a pas
@@ -2042,7 +2112,7 @@ function buildOddsRecord(teamA, teamB, sport, compName, eventId, o, formData, su
     // Le pronostic suit le vrai edge détecté (value bet), pas systématiquement
     // le favori du marché : si l'edge est sur l'outsider, c'est lui le pronostic.
     pronostic: pronosticTeam, resultatProbable: "",
-    marches, facteurs,
+    marches, facteurs, forme,
     verdict, conseil,
     topValue, surface: surface || null,
     ts: new Date().toISOString(),
@@ -2087,6 +2157,23 @@ function renderAnalysisPage(r){
     </div>
 
     <div class="section-block">
+      <div class="section-h">Forme des équipes${r.forme ? ` — ${r.forme.rankLabel}` : ""}</div>
+      ${r.forme ? `
+      <div style="display:flex;gap:10px;">
+        <div class="reason-card" style="flex:1;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${r.teamA}</div>
+          <div style="font-size:13px;color:var(--on-light);">${r.forme.teamA.record}</div>
+          ${r.forme.teamA.streak ? `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">Série : ${r.forme.teamA.streak}</div>` : ""}
+        </div>
+        <div class="reason-card" style="flex:1;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${r.teamB}</div>
+          <div style="font-size:13px;color:var(--on-light);">${r.forme.teamB.record}</div>
+          ${r.forme.teamB.streak ? `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">Série : ${r.forme.teamB.streak}</div>` : ""}
+        </div>
+      </div>` : `<div class="reason-card" style="color:var(--ink-soft);">Classement/forme non disponible pour cette compétition.</div>`}
+    </div>
+
+    <div class="section-block">
       <div class="section-h">Résumé</div>
       <div class="reason-card">${r.resume}</div>
     </div>
@@ -2116,8 +2203,8 @@ function renderAnalysisPage(r){
 
     <div class="disclaimer">${r.aiGenerated ? "Analyse rédigée par IA, à partir des cotes réelles agrégées via The Odds API et de connaissances générales sur ce sport — sans accès à des informations en temps réel." : "Analyse de secours calculée uniquement à partir des cotes réelles agrégées via The Odds API (l'assistant IA était indisponible)."} Ne constitue pas un conseil de pari et ne garantit aucun résultat réel.</div>
   `;
-  attachTeamVisual(document.getElementById("resDotA"), r.teamA, r.sport);
-  attachTeamVisual(document.getElementById("resDotB"), r.teamB, r.sport);
+  attachTeamVisual(document.getElementById("resDotA"), r.teamA, r.sport, r.forme && r.forme.teamA.logo);
+  attachTeamVisual(document.getElementById("resDotB"), r.teamB, r.sport, r.forme && r.forme.teamB.logo);
 }
 
 
@@ -2487,6 +2574,7 @@ async function fetchTeamForm(compOddsKey, teamA, teamB){
     record: pickStandingStat(e, ["overall","record"]),
     winPercent: pickStandingStat(e, ["winPercent","points"]),
     streak: pickStandingStat(e, ["streak"]),
+    logo: (e.team && Array.isArray(e.team.logos) && e.team.logos[0] && e.team.logos[0].href) || null,
   });
   return {teamA: pack(eA), teamB: pack(eB)};
 }
@@ -2969,6 +3057,7 @@ function signOut(msg){
 }
 
 function requirePaywall(){
+  if(!sessionValid()){ showGate(""); return; }
   openOverlay("account");
   toast("Débloque l'accès pour lancer une analyse");
   setTimeout(()=>{
@@ -3006,7 +3095,7 @@ function initAuth(){
     refreshAccess();
   } else {
     session = null;
-    showGate("");
+    hideGate();
   }
   initGoogleButton();
   // Retour de la page de paiement Stripe : on revérifie l'accès
