@@ -1076,6 +1076,18 @@ function initials(name){
   return name.split(/[\s,]+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase();
 }
 
+// Met en valeur visuellement les chiffres clés (%, cotes @X.XX, +X% EV) dans
+// un texte d'analyse, pour que ce soit scannable d'un coup d'œil plutôt qu'un
+// bloc de texte uniforme. Le texte source vient de l'IA (ou de nous), jamais
+// de l'utilisateur, donc pas de risque d'injection ici.
+function highlightStats(text){
+  if(!text) return "";
+  return String(text)
+    .replace(/\b\d{1,3}(?:[.,]\d+)?%/g, m=>`<strong style="color:var(--steel-hi);">${m}</strong>`)
+    .replace(/@\s?\d+(?:[.,]\d+)?/g, m=>`<strong style="color:var(--steel-hi);">${m}</strong>`)
+    .replace(/\+\d+(?:[.,]\d+)?%?\s?(?:d'EV|EV)?/g, m=>`<strong style="color:#5fd39a;">${m}</strong>`);
+}
+
 /* ---------------------------------------------------------
    VISUELS AUTO : logo de club / photo de joueur pour chaque match
    Source principale : TheSportsDB (base gratuite, sans clé requise).
@@ -1868,14 +1880,14 @@ IMPORTANT (classement) : si les données de classement ci-dessus contredisent le
 ${sport === "tennis" ? `IMPORTANT (surface) : ${surface ? `la rencontre se joue sur "${surface}" — mobilise ta connaissance générale du style de jeu de chaque joueur sur cette surface précise (certains joueurs sont nettement plus forts sur terre battue, gazon ou dur) et dis explicitement si la surface favorise un camp différent du favori du marché.` : "la surface n'est pas connue pour ce match — ne l'invente pas, dis simplement que ce facteur n'a pas pu être pris en compte."}\n` : ""}IMPORTANT (historique) : mobilise ta connaissance générale des confrontations directes passées entre ${teamA} et ${teamB} — pas juste "qui mène au H2H", mais aussi la tendance récente (les 3-5 dernières rencontres vont-elles dans le même sens ou le rapport de force a-t-il changé ?), le contexte de ces matchs (compétition, enjeu) si tu le sais, et tout schéma répété pertinent (l'un des deux domine-t-il systématiquement à domicile, ou sur ce type de rencontre ?). Si tu n'as pas cette information en mémoire avec certitude, dis-le clairement plutôt que d'inventer un score ou un nombre de victoires précis.
 
 IMPORTANT (synthèse) : ton "resume" ne doit JAMAIS traiter marché / classement / historique / surface comme des paragraphes séparés et cloisonnés — croise-les explicitement. Exemple du niveau attendu : si le marché favorise A, mais que le classement favorise B ET que l'historique récent favorise aussi B, dis-le comme un faisceau d'indices cohérent ("le marché mise sur A, mais le classement ET l'historique récent penchent pour B — ce n'est pas un détail isolé, deux signaux indépendants vont dans le même sens"), pas comme trois phrases juxtaposées sans lien entre elles. À l'inverse, si tous les signaux (marché, classement, historique) pointent dans la même direction, dis-le aussi explicitement — c'est un signal de confiance plus fort qu'un simple favori de marché isolé. C'est ce croisement qui doit guider "pronostic", "confiance" et "verdict", pas un seul facteur pris isolément.
-RAPPEL FINAL avant de répondre : le champ "pronostic" n'est PAS censé être automatiquement le favori du marché — relis les données de classement/forme ci-dessus et l'historique des confrontations, et choisis le camp que TOI tu penses réellement le plus susceptible de gagner en tenant compte de tout (classement, historique, edge détecté), pas juste la probabilité de marché la plus haute. Si le classement et l'historique penchent nettement pour l'outsider, ton pronostic doit pouvoir être l'outsider — ça doit arriver régulièrement, pas être un cas théorique.
+RAPPEL FINAL avant de répondre : le champ "pronostic" doit être ton évaluation honnête et réfléchie de qui va vraiment gagner, en pesant réellement le classement, l'historique et l'edge détecté — pas un réflexe automatique vers la probabilité de marché la plus haute, mais pas non plus un choix artificiellement varié pour "faire différent" : dis simplement qui, selon TOI, en tenant compte de tout, est le plus susceptible de gagner.
 
 Réponds UNIQUEMENT avec un objet JSON, exactement dans ce format, sans texte autour :
 {
   "pronostic": "<exactement la chaîne '${teamA}', '${teamB}', ou 'Match nul'>",
   "confiance": <entier 0-100, ta propre estimation, peut légèrement s'écarter du marché si le contexte le justifie>,
   "verdict": "<'JOUER', 'PRUDENCE' ou 'EVITER' — tiens compte de la dispersion et de la marge du marché, pas seulement du favori>",
-  "resume": "<3 à 5 phrases d'analyse en français, qui explique le consensus ET sa fiabilité (dispersion/marge), pas juste 'X est favori'>",
+  "resume": "<2 à 3 phrases COURTES et directes maximum, sans jargon répété inutilement (pas besoin de re-expliquer la méthode de Shin ou le dévigage à chaque fois, dis-le une fois vite fait) — va droit à l'essentiel : ce que disent le marché, le classement et l'historique CROISÉS ensemble, pas juste 'X est favori'>",
   "conseil": "<1 à 2 phrases de conseil concret — mentionne le value bet s'il y en a un, même si ce n'est pas le favori>",
   "facteurs": ["<facteur clé court 1>", "<facteur clé court 2>", "<facteur clé court 3>"],
   "historique": "<2-3 phrases sur l'historique des confrontations directes entre ${teamA} et ${teamB}, en connaissance générale ; si tu ne sais pas, dis explicitement 'Historique des confrontations non disponible en mémoire'>",
@@ -2175,12 +2187,12 @@ function renderAnalysisPage(r){
 
     <div class="section-block">
       <div class="section-h">Résumé</div>
-      <div class="reason-card">${r.resume}</div>
+      <div class="reason-card" style="line-height:1.6;">${highlightStats(r.resume)}</div>
     </div>
 
     <div class="section-block">
       <div class="section-h">Conseil</div>
-      <div class="reason-card">${r.conseil}</div>
+      <div class="reason-card" style="line-height:1.6;">${highlightStats(r.conseil)}</div>
     </div>
 
     <div class="section-block">
