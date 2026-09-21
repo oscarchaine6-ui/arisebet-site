@@ -431,6 +431,11 @@ body{
 .hist-title{font-weight:700;font-size:14px;}
 .hist-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
 .hist-badge{font-size:11px;font-weight:800;background:rgba(142,166,196,0.14);color:var(--steel-hi);padding:5px 10px;border-radius:99px;flex-shrink:0;}
+.cb-hist-card{margin-bottom:8px;}
+.cb-hist-badge{font-size:11px;font-weight:800;padding:5px 10px;border-radius:99px;flex-shrink:0;white-space:nowrap;}
+.cb-hist-badge.win{background:rgba(31,143,95,.16);color:#1f8f5f;}
+.cb-hist-badge.loss{background:rgba(214,72,72,.16);color:#d64848;}
+.cb-hist-badge.pending{background:rgba(201,138,16,.16);color:#c98a10;}
 
 /* account */
 .acc-head{display:flex;align-items:center;gap:14px;padding:6px 20px 18px;}
@@ -917,6 +922,28 @@ body::after{
 .mk-s{margin-top:2px;font-weight:800;font-size:15.5px;line-height:1.25;color:var(--white);}
 .mk-a{margin-top:9px;font-size:13px;line-height:1.5;color:var(--ink-soft);}
 
+/* pronostic bien visible sous le duel */
+.pick-banner{display:flex;align-items:center;justify-content:center;gap:10px;margin:14px 20px 0;padding:12px 16px;border-radius:18px;
+  background:linear-gradient(150deg,rgba(245,185,58,.16),rgba(245,185,58,.04));border:1px solid rgba(245,185,58,.4);
+  box-shadow:0 10px 22px rgba(245,185,58,.10);}
+.pick-banner .pb-crest{width:34px;height:34px;flex-shrink:0;}
+.pick-banner span{display:block;font-size:11px;font-weight:700;color:var(--gold-hi);text-transform:uppercase;letter-spacing:.03em;}
+.pick-banner b{font-family:var(--font-display);font-weight:800;font-size:19px;color:var(--white);line-height:1.25;}
+.pick-banner.draw{background:linear-gradient(150deg,rgba(142,166,196,.16),rgba(142,166,196,.04));border-color:var(--line-strong);}
+.pick-banner.draw span{color:var(--steel-hi);}
+
+/* handicap : section dédiée, chiffres réels, jamais dépendante du texte de l'IA */
+.sp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.sp-side{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:14px 8px;border-radius:16px;background:rgba(142,166,196,.06);border:1px solid transparent;}
+.sp-side.edge{background:linear-gradient(160deg,rgba(245,185,58,.14),rgba(245,185,58,.03));border-color:rgba(245,185,58,.36);}
+.sp-crest{width:38px;height:38px;}
+.sp-nm{font-weight:800;font-size:12.5px;line-height:1.2;}
+.sp-line{margin-top:2px;font-family:var(--font-display);font-weight:800;font-size:23px;color:var(--white);}
+.sp-pct{font-size:11.5px;color:var(--ink-soft);}
+.sp-best{margin-top:4px;font-size:11px;font-weight:700;color:var(--gold-hi);}
+.sp-edge-tag{margin-top:4px;font-size:10px;font-weight:800;color:#241500;background:linear-gradient(180deg,var(--gold-hi),var(--gold));padding:2px 8px;border-radius:99px;}
+.sp-note{margin-top:12px;font-size:13px;line-height:1.55;color:var(--ink-soft);}
+
 /* apparition au défilement */
 .rv{opacity:0;transform:translateY(16px);transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1);}
 .rv.in{opacity:1;transform:none;}
@@ -1055,6 +1082,7 @@ body::after{
       <button class="back-btn" onclick="closeOverlay('history')">←</button>
       <div class="overlay-title">Historique</div>
     </div>
+    <div id="combineHistList" style="padding:8px 0 4px;"></div>
     <div class="list" id="historyList" style="padding-top:8px;"></div>
   </div>
 </div>
@@ -2122,7 +2150,7 @@ function openOverlay(name){
   document.getElementById("overlay-"+name).classList.add("show");
   window.scrollTo(0,0);
   if(name==="leagues"){ lgAnimate = true; initLeagueTabs(); renderCompetitions(); }
-  if(name==="history"){ renderHistory(); }
+  if(name==="history"){ renderHistory(); checkCombineHistory().then(renderHistory); }
   if(name==="account"){ renderAccount(); }
 }
 function closeOverlay(name){
@@ -2531,7 +2559,7 @@ ${o.drawProb ? `- Match nul : ${o.drawProb}% de probabilité implicite\n` : ""}-
 ${o.avgOverround!=null ? `- Marge moyenne du marché (overround) : ${o.avgOverround}% ${o.avgOverround>=8 ? "(marché flou/peu liquide)" : "(dans la norme)"}\n` : ""}- Indice de confiance ${teamA} : ${o.confidenceA}/100 · ${teamB} : ${o.confidenceB}/100 (combine nombre de bookmakers et accord entre eux — sous 30, traite le chiffre avec prudence)
 ${o.outlierA ? `- ⚠️ La meilleure cote côté ${teamA} est une cote ISOLÉE (nettement au-dessus des autres bookmakers) — ressemble plus à une erreur de prix qu'à une vraie bonne affaire, à ne pas présenter comme un value bet fiable.\n` : ""}${o.outlierB ? `- ⚠️ La meilleure cote côté ${teamB} est une cote ISOLÉE (nettement au-dessus des autres bookmakers) — ressemble plus à une erreur de prix qu'à une vraie bonne affaire, à ne pas présenter comme un value bet fiable.\n` : ""}${o.bestTeamA ? `- Meilleure cote repérée pour ${teamA} : ${o.bestTeamA.price} chez ${o.bestTeamA.book}\n` : ""}${o.bestTeamB ? `- Meilleure cote repérée pour ${teamB} : ${o.bestTeamB.price} chez ${o.bestTeamB.book}\n` : ""}${o.valueBets && o.valueBets.length ? `- Value bet(s) 1X2 détecté(s) : ${o.valueBets.map(v=>`${v.team} @ ${v.price} chez ${v.book} (EV estimée +${v.evPercent}%)`).join(" ; ")}\n` : "- Aucun value bet 1X2 net détecté.\n"}${o.spread ? `- Handicap, ligne la plus couverte : ${teamA} ${o.spread.pointA>0?"+":""}${o.spread.pointA} / ${teamB} ${o.spread.pointB>0?"+":""}${o.spread.pointB} — probabilités dévigées ${o.spread.teamAProb}% / ${o.spread.teamBProb}% sur ${o.spread.bookmakerCount} bookmaker${o.spread.bookmakerCount>1?"s":""}.${o.spread.bestA?` Meilleure cote ${teamA} : ${o.spread.bestA.price} chez ${o.spread.bestA.book}.`:""}${o.spread.bestB?` Meilleure cote ${teamB} : ${o.spread.bestB.price} chez ${o.spread.bestB.book}.`:""}${o.spread.valueBets && o.spread.valueBets.length ? ` Value bet(s) handicap : ${o.spread.valueBets.map(v=>`${v.side==="A"?teamA:teamB} @ ${v.price} chez ${v.book} (+${v.evPercent}%)`).join(" ; ")}.` : " Aucun edge net sur le handicap."}\n` : "- Pas de données de handicap disponibles pour ce match.\n"}${formData && formData.teamA && formData.teamB ? `- ${rankLabel} ${teamA} : ${formData.teamA.record||"n/d"}${formData.teamA.streak?` (série ${formData.teamA.streak})`:""}\n- ${rankLabel} ${teamB} : ${formData.teamB.record||"n/d"}${formData.teamB.streak?` (série ${formData.teamB.streak})`:""}\n` : `- ${rankLabel}/forme indisponible pour cette compétition (utilise ta connaissance générale si tu en as une).\n`}
 IMPORTANT (classement) : si les données de classement ci-dessus contredisent le favori du marché, dis-le EXPLICITEMENT dans le résumé et pèse-le dans ton verdict — un favori du marché qui a un moins bon bilan que son adversaire est un signal d'alerte, pas un détail à ignorer.
-${sport === "tennis" ? `IMPORTANT (surface) : ${surface ? `la rencontre se joue sur "${surface}" — mobilise ta connaissance générale du style de jeu de chaque joueur sur cette surface précise (certains joueurs sont nettement plus forts sur terre battue, gazon ou dur) et dis explicitement si la surface favorise un camp différent du favori du marché.` : "la surface n'est pas connue pour ce match — ne l'invente pas, dis simplement que ce facteur n'a pas pu être pris en compte."}\n` : ""}IMPORTANT (historique) : mobilise ta connaissance générale des confrontations directes passées entre ${teamA} et ${teamB} — pas juste "qui mène au H2H", mais aussi la tendance récente (les 3-5 dernières rencontres vont-elles dans le même sens ou le rapport de force a-t-il changé ?), le contexte de ces matchs (compétition, enjeu) si tu le sais, et tout schéma répété pertinent (l'un des deux domine-t-il systématiquement à domicile, ou sur ce type de rencontre ?). Si tu n'as pas cette information en mémoire avec certitude, dis-le clairement plutôt que d'inventer un score ou un nombre de victoires précis.
+${sport === "tennis" ? `IMPORTANT (surface) : ${surface ? `la rencontre se joue sur "${surface}" — mobilise ta connaissance générale du style de jeu de chaque joueur sur cette surface précise (certains joueurs sont nettement plus forts sur terre battue, gazon ou dur) et dis explicitement si la surface favorise un camp différent du favori du marché.` : "la surface n'est pas connue pour ce match — ne l'invente pas, dis simplement que ce facteur n'a pas pu être pris en compte."}\n` : ""}IMPORTANT (historique) : mobilise ta connaissance générale des confrontations directes passées entre ${teamA} et ${teamB} — pas juste "qui mène au H2H", mais aussi la tendance récente (les 3-5 dernières rencontres vont-elles dans le même sens ou le rapport de force a-t-il changé ?), le contexte de ces matchs (compétition, enjeu) si tu le sais, et tout schéma répété pertinent (l'un des deux domine-t-il systématiquement à domicile, ou sur ce type de rencontre ?). Si tu n'as pas cette information en mémoire avec certitude, dis-le clairement plutôt que d'inventer un score ou un nombre de victoires précis. Règle de prudence renforcée : ${teamA} et ${teamB} ne sont PAS forcément des noms que tu connais bien — s'il s'agit d'un tournoi ou d'une compétition de second plan, ou de joueurs/équipes hors du top de leur discipline, pars du principe par défaut que tu NE CONNAIS PAS leur historique précis de confrontations, sauf si tu es réellement certain d'un fait précis et vérifiable. Dans le doute, préfère toujours "Historique des confrontations non disponible en mémoire" à une réponse plausible mais non vérifiée.
 
 IMPORTANT (synthèse) : ton "resume" ne doit JAMAIS traiter marché / classement / historique / surface comme des paragraphes séparés et cloisonnés — croise-les explicitement. Exemple du niveau attendu : si le marché favorise A, mais que le classement favorise B ET que l'historique récent favorise aussi B, dis-le comme un faisceau d'indices cohérent ("le marché mise sur A, mais le classement ET l'historique récent penchent pour B — ce n'est pas un détail isolé, deux signaux indépendants vont dans le même sens"), pas comme trois phrases juxtaposées sans lien entre elles. À l'inverse, si tous les signaux (marché, classement, historique) pointent dans la même direction, dis-le aussi explicitement — c'est un signal de confiance plus fort qu'un simple favori de marché isolé. C'est ce croisement qui doit guider "pronostic", "confiance" et "verdict", pas un seul facteur pris isolément.
 RAPPEL FINAL avant de répondre : le champ "pronostic" doit être ton évaluation honnête et réfléchie de qui va vraiment gagner, en pesant réellement le classement, l'historique et l'edge détecté — pas un réflexe automatique vers la probabilité de marché la plus haute, mais pas non plus un choix artificiellement varié pour "faire différent" : dis simplement qui, selon TOI, en tenant compte de tout, est le plus susceptible de gagner.
@@ -2899,6 +2927,13 @@ function renderAnalysisPage(r){
       ${bar}
     </div>`;
 
+  // --- bannière du vainqueur pronostiqué : bien visible, juste sous le duel ---
+  const pickBanner = hasPick ? `
+    <div class="pick-banner${pickDraw?" draw":""}">
+      ${!pickDraw ? `<div class="pb-crest" id="pickDot"></div>` : ""}
+      <div><span>🏆 Vainqueur pronostiqué</span><b>${escHtml(pickDraw ? "Match nul" : (r.pronostic||""))}</b></div>
+    </div>` : "";
+
   // --- verdict ---
   const conf = Math.max(0, Math.min(100, Math.round(+r.confiance || 0)));
   const verdict = `
@@ -2923,7 +2958,7 @@ function renderAnalysisPage(r){
     </div>` : "";
 
   // --- pari conseillé ---
-  const ms = Array.isArray(r.marches) ? r.marches : [];
+  const ms = (Array.isArray(r.marches) ? r.marches : []).filter(m => !/handicap/i.test(m.marche||""));
   const m0 = ms[0] || null;
   const odd = isBad ? null : extractOdd(r, m0);
   let bet = "";
@@ -2956,6 +2991,46 @@ function renderAnalysisPage(r){
       <div class="section-block rv">
         <div class="section-h">Notre conseil</div>
         <div class="reason-card" style="font-size:15px;line-height:1.7;">${highlightStats(r.conseil)}</div>
+      </div>`;
+  }
+
+  // --- handicap : section dédiée, toujours affichée si des cotes existent, calculée en code (pas par l'IA) ---
+  let spread = "";
+  if(o && o.spread){
+    const sp = o.spread;
+    const aLine = (sp.pointA>0?"+":"")+fr(sp.pointA,1);
+    const bLine = (sp.pointB>0?"+":"")+fr(sp.pointB,1);
+    const pAs = Math.round(sp.teamAProb), pBs = Math.round(sp.teamBProb);
+    const vA = (sp.valueBets||[]).find(v=>v.side==="A");
+    const vB = (sp.valueBets||[]).find(v=>v.side==="B");
+    const best = (sp.valueBets||[]).slice().sort((x,y)=>(y.evPercent||0)-(x.evPercent||0))[0] || null;
+    const note = best
+      ? `Avantage repéré sur ce handicap : <b>${escHtml(best.side==="A"?r.teamA:r.teamB)} ${escHtml(best.side==="A"?aLine:bLine)}</b> à ${fr(best.price)} chez ${escHtml(best.book)} — une cote qui vaut mieux que ce que le marché estime juste ici.`
+      : `Aucune cote scannée ne dépasse l'estimation du marché sur ce handicap — pas d'avantage net détecté sur cette ligne.`;
+    spread = `
+      <div class="section-block rv">
+        <div class="section-h">Handicap</div>
+        <div class="sp">
+          <div class="sp-row">
+            <div class="sp-side${vA?" edge":""}">
+              <div class="sp-crest" id="spDotA"></div>
+              <div class="sp-nm">${escHtml(r.teamA)}</div>
+              <div class="sp-line">${escHtml(aLine)}</div>
+              <div class="sp-pct">${pAs}% de chances de couvrir</div>
+              ${sp.bestA ? `<div class="sp-best">${fr(sp.bestA.price)} chez ${escHtml(sp.bestA.book)}</div>` : ""}
+              ${vA ? `<div class="sp-edge-tag">Avantage repéré</div>` : ""}
+            </div>
+            <div class="sp-side${vB?" edge":""}">
+              <div class="sp-crest" id="spDotB"></div>
+              <div class="sp-nm">${escHtml(r.teamB)}</div>
+              <div class="sp-line">${escHtml(bLine)}</div>
+              <div class="sp-pct">${pBs}% de chances de couvrir</div>
+              ${sp.bestB ? `<div class="sp-best">${fr(sp.bestB.price)} chez ${escHtml(sp.bestB.book)}</div>` : ""}
+              ${vB ? `<div class="sp-edge-tag">Avantage repéré</div>` : ""}
+            </div>
+          </div>
+          <div class="sp-note">${note}</div>
+        </div>
       </div>`;
   }
 
@@ -3017,7 +3092,7 @@ function renderAnalysisPage(r){
 
   const disc = `<div class="disclaimer rv">${r.aiGenerated ? "Analyse rédigée par IA, à partir des cotes réelles agrégées via The Odds API et de connaissances générales sur ce sport — sans accès à des informations en temps réel." : "Analyse de secours calculée uniquement à partir des cotes réelles agrégées via The Odds API (l'assistant IA était indisponible)."} Ne constitue pas un conseil de pari et ne garantit aucun résultat réel. Jouer comporte des risques : ne mise que ce que tu peux te permettre de perdre.</div>`;
 
-  content.innerHTML = hero + verdict + brief + bet + `<div class="rv">${combineFitHtml(r)}</div>` + forme + why + h2h + marchesHtml + disc;
+  content.innerHTML = hero + pickBanner + verdict + brief + bet + spread + `<div class="rv">${combineFitHtml(r)}</div>` + forme + why + h2h + marchesHtml + disc;
 
   // --- animations ---
   animateCounts(content);
@@ -3039,13 +3114,44 @@ function renderAnalysisPage(r){
     attachTeamVisual(document.getElementById("fmDotA"), r.teamA, r.sport, r.forme.teamA.logo, oddsKey);
     attachTeamVisual(document.getElementById("fmDotB"), r.teamB, r.sport, r.forme.teamB.logo, oddsKey);
   }
+  const pickDot = document.getElementById("pickDot");
+  if(pickDot && (pickA || pickB)){
+    const pickLogo = pickA ? (r.forme && r.forme.teamA.logo) : (r.forme && r.forme.teamB.logo);
+    attachTeamVisual(pickDot, pickA ? r.teamA : r.teamB, r.sport, pickLogo, oddsKey);
+  }
+  const spDotA = document.getElementById("spDotA"), spDotB = document.getElementById("spDotB");
+  if(spDotA) attachTeamVisual(spDotA, r.teamA, r.sport, r.forme && r.forme.teamA.logo, oddsKey);
+  if(spDotB) attachTeamVisual(spDotB, r.teamB, r.sport, r.forme && r.forme.teamB.logo, oddsKey);
 }
 
 
 /* ---------------------------------------------------------
    HISTORY
 --------------------------------------------------------- */
+function renderCombineHistList(){
+  const box = document.getElementById("combineHistList");
+  if(!box) return;
+  const hist = safeGet(COMBINE_HIST, []).filter(h=>h.day !== dayKey());
+  if(!hist.length){ box.innerHTML = ""; return; }
+  const rows = hist.slice(0,14).map(h=>{
+    const d = new Date(h.ts);
+    const dstr = d.toLocaleDateString("fr-FR", {day:"2-digit", month:"short"});
+    const n = (h.legs||[]).length;
+    const badge = h.result === "win" ? `<span class="cb-hist-badge win">✅ Passé</span>`
+      : h.result === "loss" ? `<span class="cb-hist-badge loss">❌ Perdu</span>`
+      : `<span class="cb-hist-badge pending">⏳ En attente</span>`;
+    return `<div class="hist-card cb-hist-card">
+      <div class="hist-mid">
+        <div class="hist-title">Combiné du ${escHtml(dstr)} — ${n} sélection${n>1?"s":""}</div>
+        <div class="hist-sub">Cote combinée ${fr(h.odds)} · probabilité estimée ${Math.round((h.prob||0)*100)} %</div>
+      </div>
+      ${badge}
+    </div>`;
+  }).join("");
+  box.innerHTML = `<div class="hist-section-title" style="padding:2px 4px 10px;font-size:12.5px;font-weight:800;color:var(--steel-hi);text-transform:uppercase;letter-spacing:.03em;">Combinés du jour</div>${rows}`;
+}
 function renderHistory(){
+  renderCombineHistList();
   const list = document.getElementById("historyList");
   list.innerHTML = "";
   if(history_.length===0){
@@ -4054,24 +4160,26 @@ function scoreLeg(l){
   if(l.drawProb >= 28) s -= (l.drawProb - 26)*0.6;
   return Math.round(s*10)/10;
 }
+const COMBINE_ODDS_MIN = 1.60, COMBINE_ODDS_MAX = 2.0;
 const COMBINE_TIERS = [
-  {name:"strict", ok:l=> l.prob>=60 && l.conf>=50 && l.disp<=6 && l.books>=4 && l.odds>=1.25 && l.odds<=2.0 && !l.outlier && l.drawProb<=30},
-  {name:"souple", ok:l=> l.prob>=55 && l.conf>=40 && l.disp<=8 && l.books>=3 && l.odds>=1.18 && l.odds<=2.3 && l.drawProb<=34},
-  {name:"limite", ok:l=> l.prob>=50 && l.books>=3 && l.odds>=1.15 && l.odds<=2.6},
+  {name:"strict", ok:l=> l.prob>=55 && l.conf>=45 && l.disp<=7 && l.books>=4 && l.odds>=COMBINE_ODDS_MIN && l.odds<=COMBINE_ODDS_MAX && !l.outlier && l.drawProb<=32},
+  {name:"souple", ok:l=> l.prob>=48 && l.conf>=35 && l.disp<=9 && l.books>=3 && l.odds>=COMBINE_ODDS_MIN && l.odds<=COMBINE_ODDS_MAX && l.drawProb<=38},
+  {name:"limite", ok:l=> l.books>=2 && l.odds>=COMBINE_ODDS_MIN && l.odds<=COMBINE_ODDS_MAX},
 ];
+// Prend TOUTES les jambes disponibles dans la fenêtre de cote 1,60–2,00 (pas de plafond artificiel),
+// en évitant seulement les doublons (même match) et un excès de jambes sur une même compétition.
 function selectLegs(cands, n){
-  const chosen = [], usedEv = new Set(), perComp = {}, perSport = {};
-  for(let t=0; t<COMBINE_TIERS.length && chosen.length<n; t++){
+  const chosen = [], usedEv = new Set(), perComp = {};
+  const max = isFinite(n) ? n : Infinity;
+  for(let t=0; t<COMBINE_TIERS.length && chosen.length<max; t++){
     const pool = cands.filter(l=>!usedEv.has(l.eventId) && COMBINE_TIERS[t].ok(l)).sort((a,b)=>b.score-a.score);
     for(const l of pool){
-      if(chosen.length >= n) break;
+      if(chosen.length >= max) break;
       if(usedEv.has(l.eventId)) continue;
-      if((perComp[l.compOddsKey]||0) >= 2) continue;            // pas plus de 2 jambes dans la même compétition
-      if(t < 2 && (perSport[l.sport]||0) >= 2) continue;         // on diversifie les sports tant que possible
+      if((perComp[l.compOddsKey]||0) >= 3) continue;            // pas plus de 3 jambes dans la même compétition
       chosen.push({...l, tier:t});
       usedEv.add(l.eventId);
       perComp[l.compOddsKey] = (perComp[l.compOddsKey]||0)+1;
-      perSport[l.sport] = (perSport[l.sport]||0)+1;
     }
   }
   return chosen.sort((a,b)=>a.commence-b.commence);
@@ -4140,7 +4248,7 @@ async function combineFormCheck(c){
 const COMBINE_STORE = "arisebet_combine_v1";
 const COMBINE_HIST = "arisebet_combine_hist_v1";
 const COMBINE_LEGS = 4;
-const COMBINE_CREDIT_BUDGET = 12;
+const COMBINE_CREDIT_BUDGET = 30;
 let combineState = {status:"idle", data:null, err:null, step:""};
 let combineRunning = false, combinePrinted = false, combineTimer = null;
 
@@ -4236,7 +4344,7 @@ async function generateCombine(){
     for(const pass of [0,1]){
       for(const c of comps){
         if(picked.includes(c)) continue;
-        if(pass === 0 && (perSport[c.sport]||0) >= 4) continue;
+        if(pass === 0 && (perSport[c.sport]||0) >= 8) continue;
         const cost = combineRegions(c.key).split(",").length;
         if(credits + cost > COMBINE_CREDIT_BUDGET) continue;
         picked.push(c); credits += cost; perSport[c.sport] = (perSport[c.sport]||0)+1;
@@ -4272,7 +4380,7 @@ async function generateCombine(){
 
     // 4) Croisement avec le classement (ESPN) sur les meilleurs candidats, puis sélection finale
     setCombineStep("Sélection des picks les plus solides…");
-    const pool = cands.filter(l=>COMBINE_TIERS[2].ok(l)).sort((a,b)=>b.score-a.score).slice(0,18);
+    const pool = cands.filter(l=>COMBINE_TIERS[2].ok(l)).sort((a,b)=>b.score-a.score);
     const forms = await Promise.all(pool.map(c=>combineFormCheck(c)));
     pool.forEach((c,i)=>{
       const f = forms[i];
@@ -4280,7 +4388,7 @@ async function generateCombine(){
       c.formFlag = f.flag; c.formRec = f.rec;
       if(f.flag === 1) c.score += 4; else if(f.flag === -1) c.score -= 12;
     });
-    const legs = selectLegs(pool, COMBINE_LEGS);
+    const legs = selectLegs(pool, Infinity); // toutes les jambes 1,60–2,00 disponibles aujourd'hui
     if(legs.length < 2){
       combineState.data = {day:dayKey(), ts:Date.now(), legs:[], stats:null, ai:null, reason:"no_picks", credits};
       combineState.status = "ready";
@@ -4298,7 +4406,7 @@ async function generateCombine(){
     combineState.data = data; combineState.status = "ready";
     safeSet(COMBINE_STORE, data);
     const hist = safeGet(COMBINE_HIST, []);
-    hist.unshift({day:data.day, ts:data.ts, odds:stats.odds, prob:stats.prob, legs:legs.map(l=>({home:l.home,away:l.away,team:l.team,odds:l.odds,prob:l.prob,sport:l.sport,compName:l.compName,commence:l.commence}))});
+    hist.unshift({day:data.day, ts:data.ts, odds:stats.odds, prob:stats.prob, result:null, legs:legs.map(l=>({home:l.home,away:l.away,team:l.team,odds:l.odds,prob:l.prob,sport:l.sport,compName:l.compName,compOddsKey:l.compOddsKey,commence:l.commence,eventId:l.eventId,won:null}))});
     safeSet(COMBINE_HIST, hist.slice(0,30));
   }catch(err){
     combineState.status = "error";
@@ -4309,8 +4417,56 @@ async function generateCombine(){
   }
 }
 
+/* ---------------------------------------------------------
+   VÉRIFICATION DES RÉSULTATS (✅ / ❌) DES COMBINÉS PASSÉS
+   - Un combiné passe (✅) seulement si TOUTES ses jambes gagnent.
+   - Une seule jambe perdue ou nulle => combiné perdu (❌).
+--------------------------------------------------------- */
+async function checkCombineHistory(){
+  if(!oddsApiKey) return safeGet(COMBINE_HIST, []);
+  const hist = safeGet(COMBINE_HIST, []);
+  if(!hist.length) return hist;
+  const today = dayKey();
+  const pending = hist.filter(h=> h.day !== today && h.result == null && Array.isArray(h.legs) && h.legs.length);
+  if(!pending.length) return hist;
+  const sportKeys = new Set();
+  pending.forEach(h=>h.legs.forEach(l=>{ if(l.compOddsKey && l.won == null) sportKeys.add(l.compOddsKey); }));
+  const scoresBySport = {};
+  await Promise.all([...sportKeys].map(async key=>{
+    try{
+      const url = `${ODDS_API_BASE}/sports/${encodeURIComponent(key)}/scores/?apiKey=${encodeURIComponent(oddsApiKey)}&daysFrom=3`;
+      const resp = await fetch(url);
+      if(resp.ok) scoresBySport[key] = await resp.json();
+    }catch(e){}
+  }));
+  let changed = false;
+  pending.forEach(h=>{
+    h.legs.forEach(l=>{
+      if(l.won != null || !l.compOddsKey || !l.eventId) return;
+      const list = scoresBySport[l.compOddsKey] || [];
+      const ev = list.find(e=>e.id === l.eventId);
+      if(!ev || !ev.completed || !Array.isArray(ev.scores)) return;
+      const home = ev.scores.find(s=>s.name === ev.home_team);
+      const away = ev.scores.find(s=>s.name === ev.away_team);
+      if(!home || !away) return;
+      const hs = parseFloat(home.score), as = parseFloat(away.score);
+      if(!isFinite(hs) || !isFinite(as)) return;
+      const winner = hs > as ? ev.home_team : (as > hs ? ev.away_team : null); // null = match nul
+      l.won = winner ? (winner === l.team) : false;
+      changed = true;
+    });
+    if(h.result == null && h.legs.every(l=>l.won != null)){
+      h.result = h.legs.every(l=>l.won === true) ? "win" : "loss";
+      changed = true;
+    }
+  });
+  if(changed) safeSet(COMBINE_HIST, hist);
+  return hist;
+}
+
 function initCombine(){
   const saved = safeGet(COMBINE_STORE, null);
+  checkCombineHistory().then(()=>{ if(document.getElementById("overlay-history").classList.contains("show")) renderHistory(); });
   if(saved && saved.day === dayKey() && Array.isArray(saved.legs)){
     combineState.data = saved; combineState.status = "ready";
     renderCombine();
