@@ -667,6 +667,14 @@ body::after{
 .cb-btn{flex:1;border:1px solid var(--line-strong);border-radius:14px;padding:12px 8px;background:rgba(255,255,255,.06);color:var(--ink);font-weight:700;font-size:13px;font-family:var(--font-body);cursor:pointer;text-align:center;transition:transform .12s ease,background .12s ease;}
 .cb-btn:active{transform:scale(.97);background:rgba(255,255,255,.10);}
 .cb-btn.gold{background:linear-gradient(180deg,var(--gold-hi),var(--gold) 55%,var(--gold-lo));color:#241500;border-color:transparent;box-shadow:0 8px 20px rgba(245,185,58,.28),inset 0 1px 0 rgba(255,255,255,.5);}
+.cb-stepper-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:15px;padding-top:14px;border-top:1px solid rgba(255,255,255,.10);}
+.cb-stepper-lbl{font-size:12px;font-weight:700;color:var(--steel-hi);}
+.cb-stepper{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.06);border:1px solid var(--line-strong);border-radius:14px;padding:3px;}
+.cb-stepper button{width:32px;height:32px;border:none;border-radius:11px;background:transparent;color:var(--white);font-size:17px;font-weight:800;font-family:var(--font-body);cursor:pointer;line-height:1;transition:background .12s ease,transform .12s ease;}
+.cb-stepper button:active{transform:scale(.92);background:rgba(255,255,255,.12);}
+.cb-stepper button:disabled{opacity:.3;cursor:default;}
+.cb-stepper button:disabled:active{transform:none;background:transparent;}
+.cb-stepper-n{min-width:26px;text-align:center;font-family:var(--font-display);font-weight:800;font-size:16px;color:var(--gold-hi);font-variant-numeric:tabular-nums;}
 .cb-msg{padding:22px 4px 20px;text-align:center;font-size:14px;line-height:1.55;color:#2d4058;}
 .cb-msg b{display:block;font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--ink-d);margin-bottom:4px;}
 .cb-ghost{filter:blur(5px);opacity:.5;pointer-events:none;-webkit-user-select:none;user-select:none;}
@@ -2142,11 +2150,22 @@ function setNav(which){
   if(which==="history") openOverlay("history");
   if(which==="account") openOverlay("account");
 }
+let overlayStack = [];
 function closeAllOverlays(){
   document.querySelectorAll(".overlay").forEach(o=>o.classList.remove("show"));
+  overlayStack = [];
+}
+// Empile un écran par-dessus celui déjà ouvert (au lieu de tout fermer), pour que
+// le bouton retour ↩ revienne à l'écran précédent plutôt qu'à l'accueil.
+function pushOverlay(name){
+  document.querySelectorAll(".overlay").forEach(o=>o.classList.remove("show"));
+  overlayStack.push(name);
+  document.getElementById("overlay-"+name).classList.add("show");
+  window.scrollTo(0,0);
 }
 function openOverlay(name){
   closeAllOverlays();
+  overlayStack = [name];
   document.getElementById("overlay-"+name).classList.add("show");
   window.scrollTo(0,0);
   if(name==="leagues"){ lgAnimate = true; initLeagueTabs(); renderCompetitions(); }
@@ -2154,9 +2173,15 @@ function openOverlay(name){
   if(name==="account"){ renderAccount(); }
 }
 function closeOverlay(name){
+  const idx = overlayStack.lastIndexOf(name);
+  if(idx !== -1) overlayStack.splice(idx,1);
   document.getElementById("overlay-"+name).classList.remove("show");
-  const anyOpen = [...document.querySelectorAll(".overlay")].some(o=>o.classList.contains("show"));
-  if(!anyOpen){
+  if(overlayStack.length){
+    const prev = overlayStack[overlayStack.length-1];
+    document.getElementById("overlay-"+prev).classList.add("show");
+    window.scrollTo(0,0);
+    document.querySelectorAll(".nav-item").forEach(el=> el.classList.toggle("active", el.dataset.nav===prev));
+  } else {
     document.querySelectorAll(".nav-item").forEach(el=> el.classList.toggle("active", el.dataset.nav==="home"));
   }
 }
@@ -2208,9 +2233,7 @@ async function openMatches(sport, comp){
   state.currentSport = sport;
   document.getElementById("matchesTitle").textContent = comp.name;
   const list = document.getElementById("matchesList");
-  closeAllOverlays();
-  document.getElementById("overlay-matches").classList.add("show");
-  window.scrollTo(0,0);
+  pushOverlay("matches");
 
   if(comp.odds && oddsApiKey && !oddsAutoFetch){
     // Chargement auto désactivé : on lit uniquement le cache local
@@ -2382,9 +2405,7 @@ function cancelAnalysis(){
 async function runAnalysis(teamA, teamB, sport, compName, eventId, compOddsKey, surface){
   if(!sessionValid()){ signOut("Session expirée — reconnecte-toi."); return; }
   if(!hasAccess()){ requirePaywall(); return; }
-  closeAllOverlays();
-  document.getElementById("overlay-analysis").classList.add("show");
-  window.scrollTo(0,0);
+  pushOverlay("analysis");
   analysisAbortController = new AbortController();
   const analysisSignal = analysisAbortController.signal;
 
@@ -3173,7 +3194,7 @@ function renderHistory(){
     `;
     paintCrest(card.querySelector('[data-h="A"]'), r.teamA, r.sport);
     paintCrest(card.querySelector('[data-h="B"]'), r.teamB, r.sport);
-    card.onclick = ()=>{ renderAnalysisPage(r); closeAllOverlays(); document.getElementById("overlay-analysis").classList.add("show"); window.scrollTo(0,0); };
+    card.onclick = ()=>{ renderAnalysisPage(r); pushOverlay("analysis"); };
     list.appendChild(card);
   });
 }
@@ -4196,16 +4217,18 @@ function combineStats(legs){
 }
 function buildLocalReason(l){
   const parts = [];
-  parts.push(`Le marché lui donne ${l.prob} % de chances (consensus dévigé de ${l.books} bookmakers).`);
-  if(l.disp <= 3) parts.push("Les bookmakers sont quasi unanimes.");
-  else if(l.disp > 6) parts.push(`Attention : les bookmakers divergent (${fr(l.disp,1)} pts).`);
+  parts.push(`Cote ${fr(l.odds)} pour ${l.prob} % de chances selon le consensus dévigé de ${l.books} bookmakers.`);
+  if(l.disp <= 3) parts.push("Les bookmakers sont quasi unanimes sur ce prix.");
+  else if(l.disp > 6) parts.push(`Attention : les bookmakers divergent nettement (${fr(l.disp,1)} pts d'écart).`);
   if(l.sharp > 0) parts.push("Les books de référence (Pinnacle, Betfair…) pèsent plus lourd dans ce calcul.");
-  if(l.ev != null && l.ev > 0 && l.best) parts.push(`Meilleure cote ${fr(l.best)} chez ${l.bestBook}, légèrement au-dessus du consensus (+${fr(l.ev,1)} %).`);
-  if(l.drawProb >= 27) parts.push(`Risque de nul non négligeable (${l.drawProb} %).`);
-  if(l.formFlag === 1) parts.push(`Le bilan de saison confirme (${l.formRec}).`);
-  if(l.formFlag === -1) parts.push(`Bilan de saison moins bon que l'adversaire (${l.formRec}) : signal d'alerte.`);
-  if(l.tier >= 2) parts.push("Sélection limite : elle a passé des filtres assouplis faute de mieux.");
-  return parts.slice(0,3).join(" ");
+  if(l.ev != null && l.ev > 0 && l.best) parts.push(`Meilleure cote repérée : ${fr(l.best)} chez ${l.bestBook} (+${fr(l.ev,1)} % au-dessus du consensus).`);
+  if(l.drawProb >= 27) parts.push(`Risque de nul non négligeable (${l.drawProb} %), à garder en tête.`);
+  if(l.formFlag === 1) parts.push(`Le bilan de saison confirme le favori du marché (${l.formRec}).`);
+  if(l.formFlag === -1) parts.push(`Bilan de saison moins bon que l'adversaire (${l.formRec}) : signal d'alerte à ne pas ignorer.`);
+  if(l.surface) parts.push(`Rencontre sur ${l.surface.toLowerCase()} : vérifie l'aisance de chacun sur cette surface avant de valider.`);
+  if(l.tier >= 2) parts.push("Sélection limite : elle n'a passé que des filtres assouplis, faute de mieux ce jour-là.");
+  else if(l.conf >= 60) parts.push(`Confiance élevée (${l.conf}/100) sur ce pick.`);
+  return parts.slice(0,4).join(" ");
 }
 
 /* Croise le marché avec le classement/la forme (ESPN, gratuit) : un favori du marché
@@ -4247,7 +4270,19 @@ async function combineFormCheck(c){
 --------------------------------------------------------- */
 const COMBINE_STORE = "arisebet_combine_v1";
 const COMBINE_HIST = "arisebet_combine_hist_v1";
-const COMBINE_LEGS = 4;
+const COMBINE_LEGS_STORE = "arisebet_combine_legs_target_v1";
+const COMBINE_LEGS_MIN = 2, COMBINE_LEGS_MAX = 8;
+// Nombre de sélections choisi par l'utilisateur (mémorisé). On ne l'applique
+// qu'au prochain appui sur "Régénérer" — changer la valeur ne relance rien tout seul.
+let combineLegsTarget = Math.max(COMBINE_LEGS_MIN, Math.min(COMBINE_LEGS_MAX, safeGet(COMBINE_LEGS_STORE, 4)));
+function adjustCombineLegs(delta){
+  setCombineLegsTarget(combineLegsTarget + delta);
+}
+function setCombineLegsTarget(n){
+  combineLegsTarget = Math.max(COMBINE_LEGS_MIN, Math.min(COMBINE_LEGS_MAX, n));
+  safeSet(COMBINE_LEGS_STORE, combineLegsTarget);
+  renderCombine();
+}
 const COMBINE_CREDIT_BUDGET = 30;
 let combineState = {status:"idle", data:null, err:null, step:""};
 let combineRunning = false, combinePrinted = false, combineTimer = null;
@@ -4271,10 +4306,10 @@ async function fetchCombineOdds(comp, fromMs, toMs){
 async function combineAiNotes(legs, stats){
   if(!CONFIG.aiAnalyzeUrl || !(session && session.token)) return null;
   const lines = legs.map((l,i)=>
-    `${i+1}. ${l.home} vs ${l.away} (${l.compName}) — sélection : ${l.team} gagne · cote moyenne ${fr(l.odds)} · probabilité de consensus ${l.prob} % · ${l.books} bookmakers · désaccord ${fr(l.disp,1)} pts · confiance ${l.conf}/100`
+    `${i+1}. ${l.home} vs ${l.away} (${l.compName}${l.surface ? `, surface ${l.surface}` : ""}) — sélection : ${l.team} gagne · cote moyenne ${fr(l.odds)} · probabilité de consensus ${l.prob} % · ${l.books} bookmakers · désaccord ${fr(l.disp,1)} pts · confiance ${l.conf}/100`
     + (l.ev!=null ? ` · edge +${fr(l.ev,1)} %` : "") + (l.drawProb ? ` · nul ${l.drawProb} %` : "") + (l.formRec ? ` · bilan ${l.formRec}` : "")
   ).join("\n");
-  const prompt = `Tu es l'analyste d'Arisebet. Voici le combiné du jour (${legs.length} sélections), choisi automatiquement sur des cotes réelles de bookmakers (probabilités dévigées). Cote combinée ≈ ${fr(stats.odds)}, chance estimée de réussite ≈ ${Math.round(stats.prob*100)} %.\n\n${lines}\n\nPour CHAQUE sélection, écris UNE phrase (22 mots maximum) qui explique pourquoi elle a sa place dans un combiné, ou qui nomme franchement son principal risque. Écris ensuite une phrase d'introduction sur le combiné et une phrase de point de vigilance. N'invente aucune information (blessures, compositions, météo) : tu n'as que ces chiffres. Pas de promesse de gain.\n\nRéponds UNIQUEMENT avec un objet JSON, sans texte autour : {"intro":"<1 phrase>","picks":[${legs.map(()=>'"<1 phrase>"').join(",")}],"vigilance":"<1 phrase>"}`;
+  const prompt = `Tu es l'analyste d'Arisebet. Voici le combiné du jour (${legs.length} sélections), choisi automatiquement sur des cotes réelles de bookmakers (probabilités dévigées). Cote combinée ≈ ${fr(stats.odds)}, chance estimée de réussite ≈ ${Math.round(stats.prob*100)} %.\n\n${lines}\n\nPour CHAQUE sélection, écris UNE phrase (25 mots maximum) qui explique concrètement pourquoi elle a sa place dans un combiné, ou qui nomme franchement son principal risque. Appuie-toi sur les chiffres fournis (cote, probabilité, accord des bookmakers, edge, bilan de forme) ET, quand c'est pertinent, sur ta connaissance générale de la surface (pour le tennis) et des confrontations directes passées entre ces deux camps — mais seulement si tu es réellement certain de ce fait, sinon n'en parle pas plutôt que d'inventer un historique ou un score précis. Varie les formulations d'une sélection à l'autre, évite de répéter la même structure de phrase. Écris ensuite une phrase d'introduction sur le combiné dans son ensemble et une phrase de point de vigilance concrète. N'invente aucune information (blessures, compositions, météo) : tu n'as que ces chiffres et ta connaissance générale. Pas de promesse de gain.\n\nRéponds UNIQUEMENT avec un objet JSON, sans texte autour : {"intro":"<1 phrase>","picks":[${legs.map(()=>'"<1 phrase>"').join(",")}],"vigilance":"<1 phrase>"}`;
   const ctrl = new AbortController();
   const to = setTimeout(()=>ctrl.abort(), 22000);
   try{
@@ -4373,6 +4408,7 @@ async function generateCombine(){
             ...l, eventId: ev.id, sport: c.sport, compName: c.name, compOddsKey: c.key,
             home: ev.home_team, away: ev.away_team, commence: new Date(ev.commence_time).getTime(),
             team: side==="A" ? ev.home_team : ev.away_team,
+            surface: findSurfaceForOddsKey(c.key, c.sport),
           });
         });
       });
@@ -4388,7 +4424,7 @@ async function generateCombine(){
       c.formFlag = f.flag; c.formRec = f.rec;
       if(f.flag === 1) c.score += 4; else if(f.flag === -1) c.score -= 12;
     });
-    const legs = selectLegs(pool, Infinity); // toutes les jambes 1,60–2,00 disponibles aujourd'hui
+    const legs = selectLegs(pool, combineLegsTarget); // les meilleures jambes 1,60–2,00 dispo, dans la limite choisie par l'utilisateur
     if(legs.length < 2){
       combineState.data = {day:dayKey(), ts:Date.now(), legs:[], stats:null, ai:null, reason:"no_picks", credits};
       combineState.status = "ready";
@@ -4492,29 +4528,34 @@ function regenerateCombine(){
 /* ---------------------------------------------------------
    AFFICHAGE DU TICKET
 --------------------------------------------------------- */
-const LEARN_ITEMS = [
-  ["Chaque sélection doit tenir seule.", "Vise 60 à 75 % de chances par pari (cotes autour de 1,35 à 1,80). À 1,10 ça ne rapporte rien ; à 2,50 ça fait s'effondrer tes chances."],
-  ["Les probabilités se multiplient.", "Quatre paris à 70 % ne passent ensemble que 24 % du temps, soit environ 1 fois sur 4. Trois sélections passent plus souvent que quatre, cinq presque jamais."],
-  ["Les marges des bookmakers aussi.", "Chaque jambe embarque sa marge : sur un combiné de 4, l'espérance tourne souvent autour de −15 à −20 % de la mise. Un combiné se joue en petit."],
-  ["Cherche l'accord entre bookmakers.", "Beaucoup de bookmakers et un faible écart entre eux = un prix fiable. Un marché où ils divergent est un signal d'incertitude."],
-  ["Fuis la cote isolée.", "Une cote très au-dessus des autres chez un seul bookmaker ressemble plus à une erreur de prix qu'à une bonne affaire."],
-  ["Méfie-toi du nul et des matchs liés.", "Au football, un favori à 60 % avec 28 % de nul reste piégeux. Évite deux jambes du même match ou de la même compétition serrée : diversifie."],
-  ["Mise petit.", "Une fraction de ta cagnotte (1 à 2 %) : un combiné, même bien construit, reste un ticket à faible probabilité, pas un revenu."],
-];
+function learnItems(){
+  const n = combineLegsTarget;
+  const passRate = Math.round(Math.pow(0.70, n)*100);
+  const oneIn = passRate > 0 ? Math.max(1, Math.round(100/passRate)) : null;
+  return [
+    ["Chaque sélection doit tenir seule.", "Vise 60 à 75 % de chances par pari (cotes autour de 1,35 à 1,80). À 1,10 ça ne rapporte rien ; à 2,50 ça fait s'effondrer tes chances."],
+    ["Les probabilités se multiplient.", `${n} pari${n>1?"s":""} à 70 % ne passent ensemble que ${passRate} % du temps${oneIn?`, soit environ 1 fois sur ${oneIn}`:""}. Moins de sélections passe plus souvent que plus.`],
+    ["Les marges des bookmakers aussi.", `Chaque jambe embarque sa marge : sur un combiné de ${n}, l'espérance tourne souvent autour de −15 à −20 % de la mise. Un combiné se joue en petit.`],
+    ["Cherche l'accord entre bookmakers.", "Beaucoup de bookmakers et un faible écart entre eux = un prix fiable. Un marché où ils divergent est un signal d'incertitude."],
+    ["Fuis la cote isolée.", "Une cote très au-dessus des autres chez un seul bookmaker ressemble plus à une erreur de prix qu'à une bonne affaire."],
+    ["Méfie-toi du nul et des matchs liés.", "Au football, un favori à 60 % avec 28 % de nul reste piégeux. Évite deux jambes du même match ou de la même compétition serrée : diversifie."],
+    ["Mise petit.", "Une fraction de ta cagnotte (1 à 2 %) : un combiné, même bien construit, reste un ticket à faible probabilité, pas un revenu."],
+  ];
+}
 function learnHtml(open){
   return `<details class="learn"${open?" open":""}>
     <summary>Quoi mettre dans un combiné ?</summary>
     <div class="learn-body">
-      ${LEARN_ITEMS.map(([h,t])=>`<div class="learn-item"><div><b>${h}</b> ${t}</div></div>`).join("")}
+      ${learnItems().map(([h,t])=>`<div class="learn-item"><div><b>${h}</b> ${t}</div></div>`).join("")}
       <div class="learn-foot">Arisebet applique ces règles à chaque sélection du combiné du jour et au bloc « Dans un combiné ? » de chaque analyse. Aucun résultat n'est garanti.</div>
     </div>
   </details>`;
 }
-function cbHead(n){
+function cbHead(){
   const d = new Date();
   return `<div class="cb-head">
     <div class="cb-title">Combiné<br>du jour</div>
-    <div class="cb-date">${escHtml(d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"}))}<br>${n || COMBINE_LEGS} sélection${(n || COMBINE_LEGS) > 1 ? "s" : ""}</div>
+    <div class="cb-date">${escHtml(d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"}))}<br>${combineLegsTarget} sélection${combineLegsTarget > 1 ? "s" : ""}</div>
   </div>`;
 }
 function cbGhostLegs(){
@@ -4522,12 +4563,22 @@ function cbGhostLegs(){
     ${[0,1,2].map(()=>`<div class="cb-leg" style="cursor:default"><div><div class="cb-meta">Compétition · 21:00</div><div class="cb-match">Équipe A – Équipe B</div><div class="cb-pick">Sélection du jour</div></div><div class="cb-odds"><div class="cb-odd">1,00</div></div></div>`).join("")}
   </div>`;
 }
-function cbShell(bodyInner, stubInner, printClass, n){
+function cbShell(bodyInner, stubInner, printClass){
   return `<div class="cb-slot"></div>
   <div class="cb-ticket${printClass||""}" id="cbTicket">
     <div class="cb-print">
-      <div class="cb-body">${cbHead(n)}${bodyInner}</div>
+      <div class="cb-body">${cbHead()}${bodyInner}</div>
       <div class="cb-stub">${stubInner}</div>
+    </div>
+  </div>`;
+}
+function cbStepperHtml(){
+  return `<div class="cb-stepper-row">
+    <div class="cb-stepper-lbl">Nombre de sélections</div>
+    <div class="cb-stepper">
+      <button type="button" ${combineLegsTarget<=COMBINE_LEGS_MIN?"disabled":""} onclick="adjustCombineLegs(-1)" aria-label="Moins de sélections">−</button>
+      <div class="cb-stepper-n">${combineLegsTarget}</div>
+      <button type="button" ${combineLegsTarget>=COMBINE_LEGS_MAX?"disabled":""} onclick="adjustCombineLegs(1)" aria-label="Plus de sélections">+</button>
     </div>
   </div>`;
 }
@@ -4552,7 +4603,7 @@ function renderCombine(){
   const v = combineViewState();
   let html = "";
   if(v === "login"){
-    html = cbShell(cbGhostLegs(), cbCta("Connecte-toi pour voir les 4 sélections du jour.", "Se connecter", "showGate('')"));
+    html = cbShell(cbGhostLegs(), cbCta(`Connecte-toi pour voir les ${combineLegsTarget} sélections du jour.`, "Se connecter", "showGate('')"));
   } else if(v === "paywall"){
     html = cbShell(cbGhostLegs(), cbCta("Le combiné du jour, généré chaque matin, est inclus dans l'accès à vie.", "Débloquer — 15 €", "requirePaywall()"));
   } else if(v === "nokey"){
@@ -4563,11 +4614,11 @@ function renderCombine(){
       `<div class="cb-lbl">Impression du ticket…</div><div class="cb-step">${escHtml(combineState.step || "Recherche des matchs du jour…")}</div>`);
   } else if(v === "error"){
     html = cbShell(`<div class="cb-msg"><b>Ticket bloqué</b>${escHtml(combineState.err || "")}</div>`,
-      cbCta("Rien n'a été débité de ton compte Arisebet.", "Réessayer", "regenerateCombine()"));
+      cbStepperHtml() + cbCta("Rien n'a été débité de ton compte Arisebet.", "Réessayer", "regenerateCombine()"));
   } else if(v === "empty"){
     const noMatch = combineState.data && combineState.data.reason === "no_matches";
     html = cbShell(`<div class="cb-msg"><b>${noMatch ? "Pas de match aujourd'hui" : "Aucun pick assez solide"}</b>${noMatch ? "Aucune compétition suivie n'a de rencontre dans les prochaines heures." : "Aucune sélection ne passe nos filtres aujourd'hui (probabilité, accord des bookmakers, cote). Ne pas jouer est aussi une décision."}</div>`,
-      cbCta("Le combiné se régénère automatiquement demain.", "Régénérer maintenant", "regenerateCombine()"));
+      cbStepperHtml() + cbCta("Le combiné se régénère automatiquement demain.", "Régénérer maintenant", "regenerateCombine()"));
   } else {
     html = renderCombineTicket(combineState.data);
   }
@@ -4613,7 +4664,7 @@ function renderCombineTicket(d){
   const edgeTxt = s.edge < 0
     ? `Espérance estimée : −${fr(Math.abs(s.edge)*100,0)} % de la mise — les marges des bookmakers se cumulent sur chaque sélection.`
     : `Espérance estimée positive (+${fr(s.edge*100,0)} %) : rare, revérifie les cotes avant de jouer.`;
-  const fewer = d.legs.length < COMBINE_LEGS
+  const fewer = d.legs.length < combineLegsTarget
     ? `<div class="cb-vigil" style="display:block">Seulement ${d.legs.length} sélection${d.legs.length>1?"s":""} assez solide${d.legs.length>1?"s":""} aujourd'hui : mieux vaut jouer moins que forcer.</div>` : "";
   const intro = d.ai && d.ai.intro ? `<div class="cb-intro">${escHtml(d.ai.intro)}</div>` : "";
   const vigil = d.ai && d.ai.vigilance ? `<div class="cb-vigil">${escHtml(d.ai.vigilance)}</div>` : "";
@@ -4629,9 +4680,12 @@ function renderCombineTicket(d){
     <div class="cb-actions">
       <button class="cb-btn gold" id="cbWhyBtn" onclick="toggleCombineWhy()">Pourquoi ces picks</button>
       <button class="cb-btn" onclick="shareCombine()">Partager</button>
-      <button class="cb-btn" onclick="regenerateCombine()">Régénérer</button>
+    </div>
+    ${cbStepperHtml()}
+    <div class="cb-actions">
+      <button class="cb-btn gold" onclick="regenerateCombine()">Régénérer</button>
     </div>`;
-  return cbShell(body, stub, printClass, d.legs.length);
+  return cbShell(body, stub, printClass);
 }
 function toggleCombineWhy(){
   const t = document.getElementById("cbTicket");
