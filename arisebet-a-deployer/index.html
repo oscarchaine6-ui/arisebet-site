@@ -1146,7 +1146,7 @@ body::after{
     <div class="section-block">
       <button class="btn-ghost-dark" onclick="signOut()">Se déconnecter</button>
     </div>
-    <div class="disclaimer">Arisebet génère ses analyses avec un modèle IA, à partir des cotes réelles agrégées via The Odds API et de connaissances générales sur le sport concerné — sans accès à des informations en temps réel (blessures, compositions du jour). Ce n'est pas un service de paris et ne garantit aucun résultat réel — vérifie toujours les informations avant de parier.</div>
+    <div class="disclaimer">Arisebet génère ses analyses avec un modèle IA, à partir des cotes réelles agrégées via The Odds API (et, en secours pour les tournois de tennis 250/Challenger, Odds-API.io) et de connaissances générales sur le sport concerné — sans accès à des informations en temps réel (blessures, compositions du jour). Quand aucune cote réelle n'est disponible pour un match de tennis, une simple estimation basée sur le classement peut être affichée à la place, clairement identifiée comme telle. Ce n'est pas un service de paris et ne garantit aucun résultat réel — vérifie toujours les informations avant de parier.</div>
   </div>
 </div>
 
@@ -1193,6 +1193,20 @@ body::after{
   <div style="padding:0 20px 14px;font-size:11px;line-height:1.5;color:var(--ink-soft);">
     Coche pour que l'onglet Ligues charge les vrais matchs à chaque compétition ouverte. Décoche pour économiser ton quota : la clé reste enregistrée, mais seul "Actualiser" ira chercher des matchs en direct.
   </div>
+  <div style="margin:4px 20px 0;border-top:1px solid var(--line);"></div>
+  <div style="padding:14px 20px 10px;font-size:13.5px;line-height:1.55;color:var(--ink-soft);">
+    <b style="color:var(--ink);">Cotes de secours (Odds-API.io)</b> — The Odds API ne couvre pas les tournois de tennis ATP/WTA 250 et Challenger (dont Chengdu et Hangzhou). Ajoute en plus une clé <b style="color:var(--ink);">Odds-API.io</b> (gratuite sur odds-api.io) pour que ces matchs-là puissent quand même être analysés avec de vraies cotes, en secours.
+  </div>
+  <div style="padding:0 20px 10px;">
+    <div class="search-box" style="border-radius:16px;">
+      🔑<input id="oddsKeyInput2" placeholder="Colle ta clé Odds-API.io ici" autocapitalize="off" autocorrect="off">
+    </div>
+  </div>
+  <div style="padding:0 20px 6px;display:flex;gap:10px;">
+    <button class="btn-primary" style="flex:1;" onclick="saveOddsKey2()">Enregistrer</button>
+    <button class="btn-ghost-dark" style="flex:1;background:var(--bg-2);color:var(--ink);" onclick="clearOddsKey2()">Retirer</button>
+  </div>
+  <div id="oddsKeyStatus2" style="padding:10px 20px 14px;font-size:12.5px;color:var(--ink-soft);"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -2450,6 +2464,47 @@ let analysisAbortController = null;
 function cancelAnalysis(){
   if(analysisAbortController){ analysisAbortController.abort(); }
 }
+// Carte de secours pour un match de tennis dont AUCUN fournisseur de cotes
+// (The Odds API, ni Odds-API.io en secours) n'a de marché ouvert — cas
+// fréquent pour un ATP/WTA 250 ou Challenger loin de son coup d'envoi.
+// Contrairement à l'analyse normale, ceci ne prétend jamais représenter un
+// consensus de bookmakers : c'est une simple lecture du classement mondial,
+// clairement présentée comme telle.
+function buildRankingOnlyCard(teamA, teamB, formData, reasonStatus){
+  const rA = formData.teamA, rB = formData.teamB;
+  const diff = rB.winPercent - rA.winPercent; // classement A - classement B, en "points" arbitraires
+  const favored = diff > 0 ? teamA : (diff < 0 ? teamB : null);
+  const closeCall = Math.abs(diff) < 2000; // ~2000 = écart de classement faible
+  const verdict = !favored
+    ? "Classements trop proches pour dégager un favori net."
+    : `${escHtml(favored)} mieux classé${closeCall ? ", mais l'écart reste faible" : ""}.`;
+  return `
+    <div class="section-block">
+      <div class="reason-card" style="color:var(--ink-soft);border-color:var(--line);">
+        📡 ${ODDS_STATUS_MSG[reasonStatus] || "Aucune cote de bookmaker disponible pour ce match."}
+      </div>
+    </div>
+    <div class="section-block">
+      <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:16px;padding:16px;">
+        <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:10px;">📊 Estimation basée sur le classement — sans cote réelle</div>
+        <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;">
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);">${escHtml(teamA)}</div>
+            <div style="font-size:12px;color:var(--ink-soft);">${escHtml(rA.record)}</div>
+          </div>
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);">${escHtml(teamB)}</div>
+            <div style="font-size:12px;color:var(--ink-soft);">${escHtml(rB.record)}</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--ink);margin-top:6px;">${verdict}</div>
+        <div style="font-size:11.5px;line-height:1.5;color:var(--ink-soft);margin-top:12px;">
+          Ceci n'est PAS une probabilité de marché : aucun bookmaker n'a encore publié de cote pour ce match. Le classement seul ne tient pas compte de la forme récente, de la surface ni des confrontations directes — vérifie ces éléments avant de parier.
+        </div>
+      </div>
+    </div>`;
+}
+
 async function runAnalysis(teamA, teamB, sport, compName, eventId, compOddsKey, surface){
   if(!sessionValid()){ signOut("Session expirée — reconnecte-toi."); return; }
   if(!hasAccess()){ requirePaywall(); return; }
@@ -2561,6 +2616,10 @@ async function runAnalysis(teamA, teamB, sport, compName, eventId, compOddsKey, 
   await new Promise(r=>setTimeout(r, 200));
 
   if(oddsResult.status !== "ok"){
+    if(sport === "tennis" && formData && formData.teamA && formData.teamB){
+      content.innerHTML += buildRankingOnlyCard(teamA, teamB, formData, oddsResult.status);
+      return;
+    }
     content.innerHTML += `<div class="section-block"><div class="reason-card" style="color:var(--danger);">${ODDS_STATUS_MSG[oddsResult.status] || "Analyse indisponible pour ce match pour le moment."}</div></div>`;
     return;
   }
@@ -3285,6 +3344,11 @@ function saveName(){
 --------------------------------------------------------- */
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 let oddsApiKey = safeGet("arisebet_odds_key", "");
+// Fournisseur de cotes de secours (Odds-API.io) : couvre les tournois de
+// tennis ATP/WTA 250 et Challenger que The Odds API ne couvre pas. On ne
+// l'appelle QUE quand The Odds API n'a pas pu produire d'analyse.
+const ODDS2_API_BASE = "https://api.odds-api.io/v3";
+let oddsApiKey2 = safeGet("arisebet_odds_key2", "");
 // Coupe-circuit "petit" : la clé reste enregistrée, mais si désactivé,
 // ouvrir une compétition dans Ligues ne consomme plus de quota tout
 // seul — seul le bouton "Actualiser" ira chercher des matchs en direct.
@@ -3301,8 +3365,30 @@ function openOddsSettings(){
   const autoToggle = document.getElementById("oddsAutoToggle");
   if(autoToggle) autoToggle.checked = !!oddsAutoFetch;
   updateOddsKeyStatusText();
+  const k2 = document.getElementById("oddsKeyInput2");
+  if(k2) k2.value = oddsApiKey2 || "";
+  updateOddsKey2StatusText();
   document.getElementById("oddsSheetBackdrop").classList.add("show");
   document.getElementById("oddsSheet").style.display = "flex";
+}
+function saveOddsKey2(){
+  const v = document.getElementById("oddsKeyInput2").value.trim();
+  oddsApiKey2 = v;
+  safeSet("arisebet_odds_key2", v);
+  updateOddsKey2StatusText();
+  toast(v ? "Clé Odds-API.io enregistrée" : "Aucune clé Odds-API.io renseignée");
+}
+function clearOddsKey2(){
+  oddsApiKey2 = "";
+  safeSet("arisebet_odds_key2", "");
+  document.getElementById("oddsKeyInput2").value = "";
+  updateOddsKey2StatusText();
+  toast("Clé Odds-API.io retirée");
+}
+function updateOddsKey2StatusText(){
+  const el = document.getElementById("oddsKeyStatus2");
+  if(!el) return;
+  el.textContent = oddsApiKey2 ? "Statut : clé enregistrée — les ATP/WTA 250 et Challenger passeront par ici en secours." : "Statut : aucune clé — les 250/Challenger resteront non analysables (ou basculeront sur l'estimation classement).";
 }
 function closeOddsSettings(){
   document.getElementById("oddsSheetBackdrop").classList.remove("show");
@@ -3915,55 +4001,131 @@ function summarizeBookmakerOdds(match, record){
   };
 }
 
+/* ---------------------------------------------------------
+   Fournisseur de cotes de secours : Odds-API.io.
+   The Odds API (principal) ne couvre pas les ATP/WTA 250 et
+   Challenger (Chengdu, Hangzhou, etc.). Odds-API.io couvre le
+   tennis sans distinction de catégorie, donc on ne s'en sert
+   QUE quand le principal a échoué, pour ne pas changer le
+   comportement des matchs déjà couverts. On reconvertit sa
+   réponse au format The Odds API pour réutiliser telle quelle
+   toute la logique de dévigage de summarizeBookmakerOdds().
+--------------------------------------------------------- */
+async function odds2Fetch(path, params, signal){
+  const qs = new URLSearchParams({...params, apiKey: oddsApiKey2}).toString();
+  let resp;
+  try{ resp = await fetch(`${ODDS2_API_BASE}${path}?${qs}`, {signal}); }
+  catch(e){ if(e && e.name==="AbortError") throw e; return {ok:false, status:"network_error"}; }
+  if(resp.status===401) return {ok:false, status:"invalid_key2"};
+  if(resp.status===429) return {ok:false, status:"rate_limited"};
+  if(!resp.ok) return {ok:false, status:"http_error", code:resp.status};
+  let data;
+  try{ data = await resp.json(); }catch(e){ return {ok:false, status:"parse_error"}; }
+  return {ok:true, data};
+}
+function odds2ConvertMatch(ev, oddsData){
+  const bookmakers = Object.entries((oddsData && oddsData.bookmakers) || {}).map(([bookieName, markets])=>{
+    const ml = (markets||[]).find(m=> (m.name||"").toUpperCase()==="ML");
+    const row = ml && Array.isArray(ml.odds) && ml.odds[0];
+    if(!row || row.home==null || row.away==null) return null;
+    const outcomes = [
+      {name: ev.home, price: parseFloat(row.home)},
+      {name: ev.away, price: parseFloat(row.away)},
+    ];
+    if(row.draw!=null) outcomes.push({name:"Draw", price: parseFloat(row.draw)});
+    if(!isFinite(outcomes[0].price) || !isFinite(outcomes[1].price)) return null;
+    return {key: bookieName, title: bookieName, markets:[{key:"h2h", outcomes}]};
+  }).filter(Boolean);
+  return {home_team: ev.home, away_team: ev.away, bookmakers};
+}
+async function fetchOdds2ForRecord(record, signal){
+  if(!oddsApiKey2) return {status:"no_key2"};
+  const a = normTeam(record.teamA), b = normTeam(record.teamB);
+  const matchesPair = (ev)=>{
+    const h = normTeam(ev.home), aw = normTeam(ev.away);
+    const matchesAB = (h.includes(a)||a.includes(h)) && (aw.includes(b)||b.includes(aw));
+    const matchesBA = (h.includes(b)||b.includes(h)) && (aw.includes(a)||a.includes(aw));
+    return matchesAB || matchesBA;
+  };
+  let ev = null;
+  for(const term of [record.teamA, record.teamB]){
+    const res = await odds2Fetch("/events/search", {query: term, status:"upcoming"}, signal);
+    if(!res.ok){ if(res.status!=="parse_error" && res.status!=="http_error") return {status:res.status}; continue; }
+    const list = Array.isArray(res.data) ? res.data : [];
+    ev = list.find(matchesPair);
+    if(ev) break;
+  }
+  if(!ev) return {status:"no_match_found", eventCount:0};
+  const oddsRes = await odds2Fetch("/odds", {eventId: ev.id}, signal);
+  if(!oddsRes.ok) return {status: oddsRes.status};
+  const converted = odds2ConvertMatch(ev, oddsRes.data);
+  if(!converted.bookmakers.length) return {status:"no_odds_yet"};
+  return summarizeBookmakerOdds(converted, record);
+}
+
 async function fetchOddsForRecord(record, signal){
   if(!oddsApiKey){
-    return {status:"no_key"};
+    return (record.sport==="tennis" && oddsApiKey2) ? await fetchOdds2ForRecord(record, signal) : {status:"no_key"};
   }
   const sportKey = record.compOddsKey || findOddsKeyForTeams(record.teamA, record.teamB, record.sport);
   if(!sportKey){
-    return {status:"unsupported"};
+    return (record.sport==="tennis" && oddsApiKey2) ? await fetchOdds2ForRecord(record, signal) : {status:"unsupported"};
   }
 
+  let primaryResult;
   // Precise path: we already know the exact event (came from a live match list)
   if(record.eventId){
     const url = `${ODDS_API_BASE}/sports/${encodeURIComponent(sportKey)}/events/${encodeURIComponent(record.eventId)}/odds/?apiKey=${encodeURIComponent(oddsApiKey)}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
     let resp;
-    try{ resp = await fetch(url, {signal}); }catch(e){ if(e && e.name==="AbortError") throw e; return {status:"network_error"}; }
-    if(resp.status===401) return {status:"invalid_key"};
-    if(resp.status===429) return {status:"rate_limited"};
-    if(resp.status===404) return {status:"no_match_found", eventCount:0};
-    if(!resp.ok) return {status:"http_error", code:resp.status};
-    let match;
-    try{ match = await resp.json(); }catch(e){ return {status:"parse_error"}; }
-    if(!match || !match.home_team) return {status:"no_match_found", eventCount:0};
-    return summarizeBookmakerOdds(match, record);
+    try{ resp = await fetch(url, {signal}); }catch(e){ if(e && e.name==="AbortError") throw e; primaryResult = {status:"network_error"}; }
+    if(!primaryResult){
+      if(resp.status===401) primaryResult = {status:"invalid_key"};
+      else if(resp.status===429) primaryResult = {status:"rate_limited"};
+      else if(resp.status===404) primaryResult = {status:"no_match_found", eventCount:0};
+      else if(!resp.ok) primaryResult = {status:"http_error", code:resp.status};
+      else{
+        let match;
+        try{ match = await resp.json(); }catch(e){ match = null; }
+        primaryResult = (match && match.home_team) ? summarizeBookmakerOdds(match, record) : {status:"no_match_found", eventCount:0};
+      }
+    }
+  } else {
+    // Fallback path: bulk odds list + fuzzy team-name matching (custom analysis, demo fixtures)
+    const url = `${ODDS_API_BASE}/sports/${encodeURIComponent(sportKey)}/odds/?apiKey=${encodeURIComponent(oddsApiKey)}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
+    let resp;
+    try{ resp = await fetch(url, {signal}); }catch(e){ if(e && e.name==="AbortError") throw e; primaryResult = {status:"network_error"}; }
+    if(!primaryResult){
+      if(resp.status===401) primaryResult = {status:"invalid_key"};
+      else if(resp.status===429) primaryResult = {status:"rate_limited"};
+      else if(!resp.ok) primaryResult = {status:"http_error", code:resp.status};
+      else{
+        let events;
+        try{ events = await resp.json(); }catch(e){ events = null; }
+        if(!Array.isArray(events) || events.length===0){
+          primaryResult = {status:"no_events"};
+        } else {
+          const a = normTeam(record.teamA), b = normTeam(record.teamB);
+          const match = events.find(ev=>{
+            const h = normTeam(ev.home_team), aw = normTeam(ev.away_team);
+            const matchesAB = (h.includes(a)||a.includes(h)) && (aw.includes(b)||b.includes(aw));
+            const matchesBA = (h.includes(b)||b.includes(h)) && (aw.includes(a)||a.includes(aw));
+            return matchesAB || matchesBA;
+          });
+          primaryResult = match ? summarizeBookmakerOdds(match, record) : {status:"no_match_found", eventCount: events.length};
+        }
+      }
+    }
   }
 
-  // Fallback path: bulk odds list + fuzzy team-name matching (custom analysis, demo fixtures)
-  const url = `${ODDS_API_BASE}/sports/${encodeURIComponent(sportKey)}/odds/?apiKey=${encodeURIComponent(oddsApiKey)}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
-  let resp;
-  try{
-    resp = await fetch(url, {signal});
-  }catch(e){
-    if(e && e.name==="AbortError") throw e;
-    return {status:"network_error"};
+  if(primaryResult.status === "ok") return primaryResult;
+  // The Odds API n'a rien donné (souvent : tournoi 250/Challenger non couvert,
+  // donc mauvaise clé de secours devinée par findOddsKeyForTeams). On tente
+  // Odds-API.io avant d'abandonner, uniquement pour le tennis.
+  if(record.sport==="tennis" && oddsApiKey2){
+    const secondary = await fetchOdds2ForRecord(record, signal);
+    if(secondary.status === "ok") return secondary;
   }
-  if(resp.status===401) return {status:"invalid_key"};
-  if(resp.status===429) return {status:"rate_limited"};
-  if(!resp.ok) return {status:"http_error", code:resp.status};
-  let events;
-  try{ events = await resp.json(); }catch(e){ return {status:"parse_error"}; }
-  if(!Array.isArray(events) || events.length===0) return {status:"no_events"};
-
-  const a = normTeam(record.teamA), b = normTeam(record.teamB);
-  const match = events.find(ev=>{
-    const h = normTeam(ev.home_team), aw = normTeam(ev.away_team);
-    const matchesAB = (h.includes(a)||a.includes(h)) && (aw.includes(b)||b.includes(aw));
-    const matchesBA = (h.includes(b)||b.includes(h)) && (aw.includes(a)||a.includes(aw));
-    return matchesAB || matchesBA;
-  });
-  if(!match) return {status:"no_match_found", eventCount: events.length};
-  return summarizeBookmakerOdds(match, record);
+  return primaryResult;
 }
 
 const ODDS_STATUS_MSG = {
@@ -3981,6 +4143,8 @@ const ODDS_STATUS_MSG = {
   tennis_uncovered:"Les tournois 250 et Challenger ne sont pas couverts par The Odds API (seulement Grands Chelems, ATP/WTA 1000 et 500) : pas de matchs ni d'analyse possibles ici.",
   tennis_inactive:"The Odds API ne publie des matchs de ce tournoi que pendant sa semaine de compétition. Reviens quand il commence, ou appuie sur Actualiser à l'Accueil.",
   unknown_sport_key:"The Odds API ne reconnaît plus la clé de cette compétition (elle a peut-être été renommée) — signale-le si ça persiste.",
+  no_key2:"Aucune cote de bookmaker n'a été trouvée pour ce tournoi (250/Challenger) — ajoute une clé Odds-API.io en secours (⚙️ Cotes) pour tenter de le couvrir.",
+  invalid_key2:"La clé Odds-API.io est invalide ou expirée. Vérifie-la dans les paramètres ⚙️.",
 };
 
 /* ---------------------------------------------------------
