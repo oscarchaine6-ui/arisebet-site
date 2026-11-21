@@ -444,7 +444,7 @@ $('#fLogin').onsubmit=async e=>{e.preventDefault();const email=$('#lMail').value
  try{r=await fetch('/.netlify/functions/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:LMODE,email,password:pw,name})});d=await r.json()}catch(x){}
  btn.disabled=false;setLMode(LMODE);
  if(r&&r.ok&&d&&d.token){applySession(d);closeLogin();toast(d.paid?'Connecté, accès débloqué':'Connecté');if(DEMO){Object.keys(EVENTS).forEach(k=>delete EVENTS[k]);S.bets=S.bets.filter(b=>!b.demo);save();loadAll(false)}render(cur);return}
- const code=d&&d.error;err.textContent=code==='email_taken'?'Un compte existe déjà avec cet e-mail : connecte-toi.':code==='invalid_credentials'?'E-mail ou mot de passe incorrect.':code==='too_many_attempts'?'Trop d’essais. Réessaie dans 15 minutes.':code==='bad_password'?'Mot de passe trop court (8 caractères minimum).':!r?'Serveur injoignable, vérifie ta connexion.':'Connexion impossible pour le moment.'};
+ const code=d&&d.error;err.textContent=code==='email_taken'?'Un compte existe déjà avec cet e-mail : connecte-toi.':code==='invalid_credentials'?'E-mail ou mot de passe incorrect.':code==='founder_use_google'?'Compte fondateur : connecte-toi avec Google.':code==='too_many_attempts'?'Trop d’essais. Réessaie dans 15 minutes.':code==='bad_password'?'Mot de passe trop court (8 caractères minimum).':!r?'Serveur injoignable, vérifie ta connexion.':'Connexion impossible pour le moment.'};
 $('.me').onclick=()=>sessionValid()?go('plans'):openLogin('login');
 
 /* ============ FOND D'ÉCRAN ============ */
@@ -491,7 +491,7 @@ function header(){const h=new Date().getHours(),nm=S.name||(session&&session.nam
  $('#hello').textContent=(h>=5&&h<12?'Bonjour':h<18&&h>=12?'Bon après-midi':'Bonsoir')+(nm?', '+nm:'');
  $('#today').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
  $('#meName').textContent=nm||'Invité';$('#av').innerHTML=session&&session.picture&&SERVER?`<img src="${esc(session.picture)}" alt="">`:esc((nm||'A')[0].toUpperCase());
- $('#mePlan').textContent=sessionValid()?(session.preview?'Connecté (aperçu)':session.paid?'Accès à vie':'Compte gratuit'):'Se connecter →';$('#legN').textContent=S.legs.length;$$('#demoBanner [data-open-login]').forEach(b=>b.style.display=sessionValid()?'none':'');updateSlip()}
+ $('#mePlan').textContent=sessionValid()?(session.preview?'Connecté (aperçu)':session.paid?(/^oscar\.chaine6@gmail\.com$/i.test(session.email||'')?'Fondateur · accès à vie':'Accès à vie'):'Compte gratuit'):'Se connecter →';$('#legN').textContent=S.legs.length;$$('#demoBanner [data-open-login]').forEach(b=>b.style.display=sessionValid()?'none':'');updateSlip()}
 function updateSlip(){const L=S.legs,sl=$('#slip');if(!sl)return;const show=L.length>0&&cur!=='combine'&&!OPEN;sl.classList.toggle('on',show);if(!L.length)return;const O=L.reduce((a,l)=>a*l.odd,1),P=L.reduce((a,l)=>a*l.p,1);$('#slipN').textContent=L.length+(L.length>1?' jambes':' pari');$('#slipO').textContent='@'+fmt(O);$('#slipP').textContent=fmt(P*100,0)+' % de réussite'}
 function render(v){header();({dash,matchs:renderMatches,value:renderValue,combine:renderCombo,bankroll:bank,stats,chat,plans,reglages:settings}[v]||(()=>{}))()}
 

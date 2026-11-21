@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import access from "./lib/access.js";
 
-const { signSession, isPaid } = access;
+const { signSession, isPaid, isFounder } = access;
 const tries = new Map(); // anti force brute simple : 8 essais / 15 min par IP + e-mail
 
 const hashPw = (pw, salt) => new Promise((ok, ko) => crypto.scrypt(pw, salt, 64, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? ko(e) : ok(k.toString("hex")))));
@@ -33,6 +33,8 @@ export default async (req, context) => {
 
   if (b.action === "signup") {
     if (user) return bad(409, "email_taken");
+    // Personne ne peut créer un compte e-mail avec l'adresse du fondateur (il se connecte avec Google).
+    if (isFounder(email)) return bad(403, "founder_use_google");
     const salt = crypto.randomBytes(16).toString("hex");
     const name = String(b.name || "").trim().slice(0, 60) || email.split("@")[0];
     user = { email, name, salt, hash: await hashPw(password, salt), created: now };

@@ -89,8 +89,13 @@ function verifySession(token, secret = process.env.SESSION_SECRET) {
 
 /* ---------- Paiement (Stripe) ---------- */
 const paidCache = new Map(); // email -> timestamp du dernier "payé" vérifié
+// Comptes fondateurs : accès à vie, toujours, sans Stripe ni variable d'environnement.
+const FOUNDER_EMAILS = ["oscar.chaine6@gmail.com"];
+const isFounder = (email) => FOUNDER_EMAILS.includes(String(email || "").trim().toLowerCase());
+
 async function isPaid(email) {
   email = String(email || "").toLowerCase();
+  if (isFounder(email)) return true;
   const free = (process.env.FREE_ACCESS_EMAILS || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -132,4 +137,4 @@ async function requirePaid(event) {
   return { ok: true, user };
 }
 
-module.exports = { json, bearer, verifyGoogleCredential, signSession, verifySession, isPaid, requirePaid };
+module.exports = { isFounder, FOUNDER_EMAILS, json, bearer, verifyGoogleCredential, signSession, verifySession, isPaid, requirePaid };
