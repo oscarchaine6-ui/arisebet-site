@@ -50,6 +50,7 @@ export default async (req) => {
   if (sport && !/^[a-z0-9_]{2,60}$/.test(sport)) return Response.json({ error: "bad_sport" }, { status: 400 });
   if (event && !/^[a-zA-Z0-9]{6,64}$/.test(event)) return Response.json({ error: "bad_event" }, { status: 400 });
 
+  const CORE = new Set(["soccer_france_ligue_one", "soccer_epl", "soccer_uefa_champs_league", "soccer_spain_la_liga", "soccer_italy_serie_a", "soccer_germany_bundesliga", "basketball_nba", "icehockey_nhl", "rugbyunion_france_top14", "americanfootball_nfl"]);
   const ttlOdds = Math.max(2, Number(process.env.ODDS_CACHE_MIN || 10)) * 60e3;
   let path, params, ttl, cacheKey;
   if (p === "sports") { path = "/sports/"; params = {}; ttl = 6 * 3600e3; cacheKey = "sports"; }
@@ -64,6 +65,14 @@ export default async (req) => {
 
   const store = await blobStore();
   const now = Date.now();
+  // Économie du quota : plus il reste peu de requêtes, plus le cache dure. Les petites compétitions se rafraîchissent moins souvent.
+  if (p !== "sports") {
+    let q = null; try { q = store ? await store.get("quota", { type: "json" }) : mem.get("quota"); } catch (e) {}
+    const left = q && q.left != null ? Number(q.left) : null;
+    const f = left == null ? 1 : left < 80 ? 36 : left < 300 ? 8 : left < 1500 ? 3 : 1;
+    const extra = p === "odds" && !CORE.has(sport) ? 3 : 1;
+    ttl = ttl * f * extra;
+  }
   let hit = null;
   try { hit = store ? await store.get(cacheKey, { type: "json" }) : mem.get(cacheKey); } catch (e) {}
   if (hit && now - hit.ts < ttl) {
@@ -81,6 +90,7 @@ export default async (req) => {
   }
   let body = await r.text();
   const left = r.headers.get("x-requests-remaining");
+  if (left != null) { try { const qr = { left: Number(left), ts: now }; if (store) await store.setJSON("quota", qr); else mem.set("quota", qr); } catch (e) {} }
   if (p === "odds") body = await withOpening(store, sport, body, now);
   const rec = { ts: now, body, left };
   try { if (store) await store.setJSON(cacheKey, rec); else mem.set(cacheKey, rec); } catch (e) {}

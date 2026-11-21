@@ -221,7 +221,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{font-size:12px;color
 <section class="view" id="v-matchs">
 <div class="glass pad rv"><div class="row" style="flex-wrap:wrap"><div><h3>Matchs à venir et en direct</h3><div class="small mute" id="mCount"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="mSearch" placeholder="Équipe, joueur…" style="width:200px;min-height:36px"><button class="sm" id="manageComps">Compétitions</button></div></div>
 <div class="row" style="margin-top:10px;flex-wrap:wrap"><div class="seg" id="mSort"><button data-s="time" class="on">Par heure</button><button data-s="idx">Indice</button><button data-s="safe">Plus sûrs</button><button data-s="value">Value</button><button data-s="move">Cotes qui bougent</button><button data-s="dog">Outsiders</button></div></div>
-<div class="chips" id="compChips" style="margin-top:12px"></div></div>
+<div class="chips" id="compChips" style="margin-top:12px"></div><div class="chips" id="compChips2" style="margin-top:6px"></div></div>
 <div class="mlist" id="mList"></div>
 </section>
 
@@ -264,7 +264,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{font-size:12px;color
 <section class="view" id="v-reglages"><div class="g c2">
 <div class="glass pad rv"><h3>Source des cotes</h3><p class="small mute">Les cotes viennent du serveur Arisebet, rien à configurer. Tu peux mettre ta propre clé The Odds API si tu préfères (elle reste dans ton navigateur).</p>
 <div style="display:flex;gap:8px;margin-top:10px"><input id="keyIn" type="password" placeholder="Clé perso (optionnel)" autocomplete="off"><button class="dark" id="keySave">Enregistrer</button></div><p class="small" id="keyStatus"></p>
-<label style="margin-top:12px"><input type="checkbox" id="autoLoad" style="width:auto;min-height:auto"> Charger les matchs automatiquement à l'ouverture</label></div>
+<label style="margin-top:12px"><input type="checkbox" id="autoLoad" style="width:auto;min-height:auto"> Charger les matchs automatiquement à l'ouverture</label><label style="margin-top:8px"><input type="checkbox" id="allSports" style="width:auto;min-height:auto"> Tous les sports (tennis, rugby, MMA, boxe, handball, NFL, basket européen…)</label></div>
 <div class="glass pad rv" style="grid-column:1/-1"><h3>Nouveautés de la version 3.5</h3><ul class="small" style="margin:8px 0 0;padding-left:18px;line-height:1.7">
 <li><b>Les outsiders comptent aussi</b> : l’IA étudie toujours l’outsider, le plan du jour a sa section « Outsiders à value », un outsider du jour chaque matin, un tri « Outsiders » dans les matchs et leur propre bilan.</li>
 <li><b>Fond d’écran au choix</b> : décor de base, stade de nuit, minuit, aube ou ta propre photo, avec flou, assombrissement et opacité du verre réglables.</li>
@@ -396,12 +396,16 @@ async function api(path,params){let r;
  const rem=r.headers.get('x-requests-remaining');if(rem!=null){QUOTA=+rem;safeSet('ab3_quota',QUOTA)}
  if(r.status===401)throw new Error('Clé The Odds API invalide');if(r.status===429)throw new Error('Quota The Odds API épuisé');if(!r.ok)throw new Error('Erreur '+r.status);return r.json()}
 async function loadMeta(){const c=safeGet('ab3_meta',null);if(c&&Date.now()-c.ts<6*3600e3){META=c.list;return}META=await api('/sports/',{});safeSet('ab3_meta',{ts:Date.now(),list:META})}
-async function loadComp(key,force){const c=safeGet('ab3_ev_'+key,null);if(!force&&c&&Date.now()-c.ts<15*60e3){EVENTS[key]=c.ev;return}
+async function loadComp(key,force){const c=safeGet('ab3_ev_'+key,null);if(!force&&c&&Date.now()-c.ts<(S.comps.includes(key)?15:40)*60e3){EVENTS[key]=c.ev;return}
  const ev=await api(`/sports/${key}/odds/`,{regions:'eu',markets:'h2h',oddsFormat:'decimal',dateFormat:'iso'});EVENTS[key]=ev;safeSet('ab3_ev_'+key,{ts:Date.now(),ev})}
+// Tous les sports : toutes les compétitions actives (tennis, rugby, MMA, boxe, handball, NFL…) + les grands championnats de foot
+const CORE_SOCCER=['soccer_france_ligue_one','soccer_france_ligue_two','soccer_epl','soccer_spain_la_liga','soccer_italy_serie_a','soccer_germany_bundesliga','soccer_uefa_champs_league','soccer_uefa_europa_league','soccer_uefa_europa_conference_league','soccer_netherlands_eredivisie','soccer_portugal_primeira_liga','soccer_fifa_world_cup_qualifiers_europe','soccer_uefa_nations_league','soccer_belgium_first_div','soccer_turkey_super_league'];
+function autoComps(){if(S.allSports===false||!META)return[];const hid=S.hiddenComps||[];return META.filter(s=>s.active&&!s.has_outrights&&!hid.includes(s.key)&&(s.group!=='Soccer'||CORE_SOCCER.includes(s.key))).map(s=>s.key)}
+const wantedComps=()=>[...new Set([...S.comps,...autoComps()])];
 async function loadAll(force){if(LOADING)return;if(!LIVE()){useDemo();return}
  LOADING=true;DEMO=false;setStatus('load');if(cur==='matchs')renderMatches();
  try{await loadMeta().catch(()=>{});const act=META?new Set(META.filter(s=>s.active).map(s=>s.key)):null;
-  const keys=S.comps.filter(k=>!act||act.has(k));for(let i=0;i<keys.length;i+=3)await Promise.all(keys.slice(i,i+3).map(k=>loadComp(k,force).catch(e=>{if(/Clé|Quota|quota|Connecte|configurées/.test(e.message))throw e})));
+  const keys=wantedComps().filter(k=>!act||act.has(k));for(let i=0;i<keys.length;i+=4)await Promise.all(keys.slice(i,i+4).map(k=>loadComp(k,force).catch(e=>{if(/Clé|Quota|quota|Connecte|configurées/.test(e.message))throw e})));
   setStatus('live')}catch(e){setStatus('err',e.message);toast(e.message);if(!allEvents().length){LOADING=false;useDemo(true);setStatus('err',e.message);return}}
  LOADING=false;render(cur)}
 function allEvents(){const now=Date.now();return Object.values(EVENTS).flat().filter(e=>{const t=new Date(e.commence_time).getTime();return t>now-3.5*3600e3&&t<now+4*86400e3}).sort((a,b)=>a.commence_time<b.commence_time?-1:1)}
@@ -542,11 +546,15 @@ new ResizeObserver(()=>{if(curPts&&cur==='dash')paint($('#curve svg'),curPts,$('
 
 /* ============ MATCHS ============ */
 const compTitle=k=>(META&&META.find(s=>s.key===k)?.title)||(Object.values(EVENTS).flat().find(e=>e.sport_key===k)?.sport_title)||k.replace(/_/g,' ');
-function renderMatches(){const keys=[...new Set([...S.comps,...Object.keys(EVENTS)])].filter(k=>EVENTS[k]?.length||S.comps.includes(k));
- $('#compChips').innerHTML=`<button data-f="all" class="${FILTER==='all'?'on':''}">Tout</button><button data-f="live" class="${FILTER==='live'?'on':''}">En direct</button>`+keys.map(k=>`<button data-f="${esc(k)}" class="${FILTER===k?'on':''}">${esc(compTitle(k))}</button>`).join('');
- $$('#compChips button').forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderMatches()});
+const SP_ICON={soccer:'⚽',tennis:'🎾',basketball:'🏀',icehockey:'🏒',rugbyunion:'🏉',rugbyleague:'🏉',americanfootball:'🏈',mma:'🥊',boxing:'🥊',baseball:'⚾',handball:'🤾',volleyball:'🏐',cricket:'🏏',aussierules:'🏉',golf:'⛳',darts:'🎯',snooker:'🎱',tabletennis:'🏓',esports:'🎮'};
+function renderMatches(){const keys=[...new Set([...wantedComps(),...Object.keys(EVENTS)])].filter(k=>EVENTS[k]?.length);
+ const spOf=k=>sportOf(k),cnt={};keys.forEach(k=>{const n=(EVENTS[k]||[]).filter(e=>allEvents().includes(e)).length;if(n)cnt[spOf(k)]=(cnt[spOf(k)]||0)+n});
+ const selSp=FILTER.startsWith('sp:')?FILTER.slice(3):(FILTER!=='all'&&FILTER!=='live'?spOf(FILTER):'');
+ $('#compChips').innerHTML=`<button data-f="all" class="${FILTER==='all'?'on':''}">Tout</button><button data-f="live" class="${FILTER==='live'?'on':''}">En direct</button>`+Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).map(sp=>`<button data-f="sp:${esc(sp)}" class="${selSp===sp?'on':''}">${SP_ICON[sp]||'🏆'} ${esc(SPORT_FR[sp]||sp)} <span class="mute" style="font-weight:500">${cnt[sp]}</span></button>`).join('')
+  ; $('#compChips2').innerHTML=(selSp?keys.filter(k=>spOf(k)===selSp&&(EVENTS[k]||[]).some(e=>allEvents().includes(e))).map(k=>`<button data-f="${esc(k)}" class="${FILTER===k?'on':''}" style="font-size:13px">${esc(compTitle(k))}</button>`).join(''):'');
+ $$('#compChips button, #compChips2 button').forEach(b=>b.onclick=()=>{FILTER=b.dataset.f;renderMatches()});
  if(LOADING&&!allEvents().length){$('#mList').innerHTML='<div class="skel"></div>'.repeat(5);return}
- const q=normTeam($('#mSearch').value);let ev=allEvents();const SORT=$('#mSort .on')?.dataset.s||'time';if(FILTER==='live')ev=ev.filter(isLive);else if(FILTER!=='all')ev=ev.filter(e=>e.sport_key===FILTER);if(q)ev=ev.filter(e=>normTeam(e.home_team+e.away_team).includes(q));
+ const q=normTeam($('#mSearch').value);let ev=allEvents();const SORT=$('#mSort .on')?.dataset.s||'time';if(FILTER==='live')ev=ev.filter(isLive);else if(FILTER.startsWith('sp:'))ev=ev.filter(e=>sportOf(e.sport_key)===FILTER.slice(3));else if(FILTER!=='all')ev=ev.filter(e=>e.sport_key===FILTER);if(q)ev=ev.filter(e=>normTeam(e.home_team+e.away_team).includes(q));
  Object.keys(EVENTS).forEach(loadLogos);loadLive();setTimeout(()=>{if(!renderMatches._n||renderMatches._n!==ev.length+SORT+FILTER){renderMatches._n=ev.length+SORT+FILTER;stagger($$('#mList .mc, #mList .dayh'),{step:35})}},0);
  $('#mCount').textContent=`${ev.length} match${ev.length>1?'s':''}${DEMO?' · cotes d’exemple':' · cotes réelles The Odds API'}`;
  let rows=ev.map(e=>({e,r:analyze(e)})).filter(x=>x.r);
@@ -971,10 +979,10 @@ function plans(){const paid=hasAccess()&&SERVER&&sessionValid();$('#planPill').c
  wireLocks($('#v-plans'));const so=$('#signout');if(so)so.onclick=()=>{session=null;safeSet('arisebet_session',null);try{google.accounts.id.disableAutoSelect()}catch(e){}plans();header()}}
 
 /* ============ PARAMÈTRES ============ */
-function settings(){renderBgList();applyBg();$('#sName').value=S.name;$('#sBank').value=S.bankroll||'';$('#sMin').value=S.minOdd?fmt(S.minOdd):'';$('#sMaxDay').value=S.maxDay||'';$('#keyIn').value=oddsKey?'••••••••'+String(oddsKey).slice(-4):'';$('#autoLoad').checked=S.auto!==false;applyTheme(S.theme);
+function settings(){$('#allSports').checked=S.allSports!==false;renderBgList();applyBg();$('#sName').value=S.name;$('#sBank').value=S.bankroll||'';$('#sMin').value=S.minOdd?fmt(S.minOdd):'';$('#sMaxDay').value=S.maxDay||'';$('#keyIn').value=oddsKey?'••••••••'+String(oddsKey).slice(-4):'';$('#autoLoad').checked=S.auto!==false;applyTheme(S.theme);
  $('#keyStatus').innerHTML=!SERVER?'<span class="mute">Dans l’aperçu, les cotes sont des exemples.</span>':oddsKey?`<span class="up">Clé perso utilisée.</span>${QUOTA!=null?' Quota restant : '+QUOTA+' requêtes.':''} <button class="sm" id="keyDel">Revenir aux cotes du serveur</button>`:'<span class="up">Cotes du serveur Arisebet.</span>';const kd=$('#keyDel');if(kd)kd.onclick=()=>{oddsKey='';try{localStorage.removeItem('arisebet_odds_key')}catch(e){}settings();loadAll(true)}}
 $('#keySave').onclick=()=>{const v=$('#keyIn').value.trim();if(!v||v.startsWith('••')){toast('Colle ta clé');return}oddsKey=v;safeSet('arisebet_odds_key',v);Object.keys(localStorage).filter(k=>k.startsWith('ab3_ev_')).forEach(k=>localStorage.removeItem(k));settings();toast('Clé enregistrée');loadAll(true)};
-$('#autoLoad').onchange=e=>{S.auto=e.target.checked;save()};
+$('#autoLoad').onchange=e=>{S.auto=e.target.checked;save()};$('#allSports').onchange=e=>{S.allSports=e.target.checked;save();if(e.target.checked)loadAll(false);else{Object.keys(EVENTS).forEach(k=>{if(!S.comps.includes(k))delete EVENTS[k]});render(cur)}};
 $('#sName').oninput=e=>{S.name=e.target.value.trim();save();header()};
 $('#sBank').oninput=e=>{S.bankroll=num(e.target.value)||0;save()};
 $('#sMin').oninput=e=>{const v=num(e.target.value);if(v&&v>=1.01){S.minOdd=v;save()}};
