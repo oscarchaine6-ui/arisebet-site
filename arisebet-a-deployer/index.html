@@ -127,7 +127,7 @@ main{overflow:auto;padding:22px clamp(16px,2.4vw,30px) 40px;position:relative}
 .mc .when{font-weight:700;font-size:13px}.mc .teams{display:grid;gap:6px}.mc .t{display:flex;align-items:center;gap:8px;font-weight:600}.mc .t .crest{width:24px;height:24px;border-radius:7px;font-size:9px}
 .mc .od{display:flex;gap:6px}.mc .od span{flex:1;text-align:center;background:#ffffffa8;border-radius:10px;padding:6px 4px;font-weight:700;font-size:14px}.mc .od span small{display:block;font-weight:500;font-size:11px;color:var(--mute)}.mc .od span.pk{outline:2px solid var(--acc)}
 .mc .side{text-align:right}
-.mc .mv{grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4;padding-top:10px;border-top:1px solid #2a161314}.mc .mv .pill{flex:none}
+.mc .mv{grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4;padding-top:10px;border-top:1px solid #2a161314}.mc .mv .pill{flex:none}.mc .mv .aiq{flex:none;min-height:30px;padding:4px 10px;font-size:12px}
 .vlist{margin:10px 0 0;padding-left:18px;display:grid;gap:5px;font-size:13.5px;line-height:1.45}
 .skel{height:76px;border-radius:20px;background:linear-gradient(90deg,#ffffff50,#ffffff90,#ffffff50);background-size:200% 100%;animation:sh 1.2s infinite}@keyframes sh{to{background-position:-200% 0}}
 .empty{padding:28px;text-align:center;color:var(--mute);border:1.5px dashed #2a161325;border-radius:16px}
@@ -553,11 +553,12 @@ function renderMatches(){const keys=[...new Set([...S.comps,...Object.keys(EVENT
  const IX=x=>indice(x.r,x.r.pick,FORM[x.e.sport_key+'|'+x.r.H+'|'+x.r.A]||(DEMO||!SERVER?demoForm(x.r):null)).v;if(SORT==='idx')rows.sort((a,b)=>IX(b)-IX(a));else if(SORT==='safe')rows.sort((a,b)=>b.r.p[b.r.pick]-a.r.p[a.r.pick]);else if(SORT==='value')rows.sort((a,b)=>(b.r.val[0]?.ev??-1)-(a.r.val[0]?.ev??-1));else if(SORT==='dog'){const D=new Map(outsiders(24*7,true).map(x=>[x.r.ev.id,x]));rows=rows.filter(x=>D.has(x.e.id)).sort((a,b)=>D.get(b.e.id).score-D.get(a.e.id).score)}else if(SORT==='move')rows=rows.filter(x=>x.r.bigMove).sort((a,b)=>Math.abs(b.r.bigMove.d)-Math.abs(a.r.bigMove.d));
  let lastDay='';
  $('#mList').innerHTML=rows.map(({e,r})=>{let dh='';if(SORT==='time'){const dd=isLive(e)?'En direct':new Date(e.commence_time).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});const t=new Date(),dn=Math.round((new Date(new Date(e.commence_time).toDateString())-new Date(t.toDateString()))/864e5),lab=isLive(e)?'En direct':dn===0?'Aujourd’hui':dn===1?'Demain':dd;if(lab!==lastDay){dh=`<div class="dayh">${lab}</div>`;lastDay=lab}}const fm=FORM[e.sport_key+'|'+r.H+'|'+r.A]||(DEMO||!SERVER?demoForm(r):null),VD=verdictOf(r,fm),PK=VD.k||r.pick,rk=[VD.title,VD.cls],cell=k=>r.best[k]?`<span class="${k===VD.k?'pk':''}"><small>${k==='A'?'1':k==='N'?'N':'2'} · ${pct(r.p[k])}</small>${fmt(r.best[k].price)}</span>`:'';const v=r.val[0];
-  return dh+`<div class="glass mc" data-ev="${esc(e.id)}" tabindex="0"><div><div class="when">${kick(e)}</div><div class="small mute">${esc(e.sport_title)}</div></div><div class="teams"><div class="t">${crest(r.H)}${esc(r.H)}</div><div class="t">${crest(r.A)}${esc(r.A)}</div></div><div class="od">${cell('A')}${r.hasDraw?cell('N'):''}${cell('B')}</div><div class="side"><div style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><span class="ib" title="Indice Arisebet du pari conseillé">${indice(r,PK,fm).v}</span>${VD.k?`<button class="qa" data-quick="${esc(e.id)}" title="Ajouter le pari conseillé au ticket" aria-label="Ajouter ${esc(nameOf(r,PK))} au ticket">+</button>`:''}</div>${v&&v.ev>0?`<div class="small up" style="margin-top:4px">Value +${fmt(v.ev*100,1)} %</div>`:`<div class="small mute" style="margin-top:4px">${r.n} bookmakers</div>`}${r.bigMove?`<div class="small ${r.bigMove.d<0?'up':'down'}" style="margin-top:2px;font-weight:700" title="Cote moyenne à l’ouverture puis maintenant">${r.bigMove.d<0?'↘':'↗'} ${esc(r.bigMove.k==='N'?'Nul':short(nameOf(r,r.bigMove.k)))} ${fmt(r.bigMove.from)} → ${fmt(r.bigMove.to)}</div>`:''}</div><div class="mv">${hasAccess()?`<span class="pill ${VD.cls}">${VD.title}</span><span><b>${VD.k?esc(nameOf(r,VD.k))+(VD.b?' @'+fmt(VD.b.price):''):'Passe ton tour'}</b> · ${VD.why}</span>`:`<span class="pill p-warn">🔒 Verdict</span><span class="mute">La vraie analyse de ce match (favori, nul ou outsider, ou pas de pari) est réservée aux membres.</span>`}</div></div>`}).join('')||`<div class="empty glass">${SORT==='dog'?'Aucun outsider jouable cette semaine (cote entre 2 et 10, proche de la value).':SERVER&&!LIVE()?'Connecte-toi dans Abonnement pour charger les vrais matchs.':'Aucun match pour ce filtre.'}</div>`}
+  return dh+`<div class="glass mc" data-ev="${esc(e.id)}" tabindex="0"><div><div class="when">${kick(e)}</div><div class="small mute">${esc(e.sport_title)}</div></div><div class="teams"><div class="t">${crest(r.H)}${esc(r.H)}</div><div class="t">${crest(r.A)}${esc(r.A)}</div></div><div class="od">${cell('A')}${r.hasDraw?cell('N'):''}${cell('B')}</div><div class="side"><div style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><span class="ib" title="Indice Arisebet du pari conseillé">${indice(r,PK,fm).v}</span>${VD.k?`<button class="qa" data-quick="${esc(e.id)}" title="Ajouter le pari conseillé au ticket" aria-label="Ajouter ${esc(nameOf(r,PK))} au ticket">+</button>`:''}</div>${v&&v.ev>0?`<div class="small up" style="margin-top:4px">Value +${fmt(v.ev*100,1)} %</div>`:`<div class="small mute" style="margin-top:4px">${r.n} bookmakers</div>`}${r.bigMove?`<div class="small ${r.bigMove.d<0?'up':'down'}" style="margin-top:2px;font-weight:700" title="Cote moyenne à l’ouverture puis maintenant">${r.bigMove.d<0?'↘':'↗'} ${esc(r.bigMove.k==='N'?'Nul':short(nameOf(r,r.bigMove.k)))} ${fmt(r.bigMove.from)} → ${fmt(r.bigMove.to)}</div>`:''}</div><div class="mv">${hasAccess()?`<span class="pill ${VD.cls}">${VD.title}</span><span style="flex:1"><b>${VD.k?esc(nameOf(r,VD.k))+(VD.b?' @'+fmt(VD.b.price):''):'Passe ton tour'}</b> · ${VD.why}</span>${VD.src==='marché'&&SERVER?`<button class="sm aiq" data-aiq="${esc(e.id)}">✦ Analyse IA</button>`:''}`:`<span class="pill p-warn">🔒 Verdict</span><span class="mute">La vraie analyse de ce match (favori, nul ou outsider, ou pas de pari) est réservée aux membres.</span>`}</div></div>`}).join('')||`<div class="empty glass">${SORT==='dog'?'Aucun outsider jouable cette semaine (cote entre 2 et 10, proche de la value).':SERVER&&!LIVE()?'Connecte-toi dans Abonnement pour charger les vrais matchs.':'Aucun match pour ce filtre.'}</div>`}
 $('#mSearch').oninput=renderMatches;
 $$('#mSort button').forEach(b=>b.onclick=()=>{$$('#mSort button').forEach(x=>x.classList.toggle('on',x===b));renderMatches()});
 $('#dogAll').onclick=()=>{$$('#mSort button').forEach(x=>x.classList.toggle('on',x.dataset.s==='dog'));go('matchs');setTimeout(renderMatches,50)};
 function addLeg(r,k){if(!r.best[k])return;flyToSlip();S.legs=S.legs.filter(l=>l.eventId!==r.ev.id);S.legs.push({eventId:r.ev.id,sportKey:r.ev.sport_key,side:k,home:r.H,away:r.A,pick:nameOf(r,k),odd:r.best[k].price,book:r.best[k].book,p:r.p[k],sp:SPORT_FR[r.sport]||r.sport});save();header();toast(`${nameOf(r,k)} ajouté au ticket`)}
+document.addEventListener('click',e=>{const q=e.target.closest('[data-aiq]');if(!q)return;e.stopPropagation();const id=q.dataset.aiq;openMatch(id);setTimeout(()=>{const ev=allEvents().find(x=>x.id===id),r=ev&&analyze(ev);if(r&&$('#aiBox')&&hasAccess())aiMatch(r)},350)},true);
 document.addEventListener('click',e=>{const q=e.target.closest('[data-quick]');if(!q)return;e.stopPropagation();const ev=allEvents().find(x=>x.id===q.dataset.quick);const r=ev&&analyze(ev);if(!r)return;const VD=verdictOf(r,FORM[ev.sport_key+'|'+r.H+'|'+r.A]||(DEMO||!SERVER?demoForm(r):null));if(VD.k)addLeg(r,VD.k);else toast('Pas de pari conseillé sur ce match')},true);
 $('#mList').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.ev)openMatch(e.target.dataset.ev)});
 $('#manageComps').onclick=()=>palOpen('compet ');
@@ -591,41 +592,56 @@ function idxHtml(r,k,form){const I=indice(r,k,form),C=2*Math.PI*58;
 // Ne prend pas « la plus petite cote » : compare favori, nul et outsider sur la proba réelle, le prix, le mouvement, la forme et l'IA.
 const fForm=f=>{if(!f||!f.length)return null;const c={V:0,N:0,D:0};f.slice(0,5).forEach(x=>{if(x&&c[x.r]!=null)c[x.r]++});return c};
 function verdictOf(r,form){
- const E=k=>r.best[k]?r.p[k]*r.best[k].price-1:-1,MV=k=>r.move[k]?r.move[k].d:0;
- const fav=r.keys.reduce((x,y)=>r.p[y]>r.p[x]?y:x),pf=r.p[fav],ef=E(fav),drift=MV(fav)>=.06;
+ // Prix « réel » : 2e meilleure cote du marché (évite qu'un seul bookmaker isolé fabrique une fausse value)
+ const RB=k=>{const l=r.books.filter(b=>b[k]!=null).map(b=>({price:b[k],book:b.title})).sort((x,y)=>y.price-x.price);return l.length>=3?l[1]:l[0]||null};
+ const E=k=>{const b=RB(k);return b?r.p[k]*b.price-1:-1},MV=k=>r.move[k]?r.move[k].d:0;
+ const fav=r.keys.reduce((x,y)=>r.p[y]>r.p[x]?y:x),opp=fav==='A'?'B':'A',pf=r.p[fav],ef=E(fav),drift=MV(fav)>=.06;
+ const fp=form&&form.A&&form.B?{A:formPts(form.A),B:formPts(form.B)}:null,fd=fp&&fp.A!=null&&fp.B!=null&&fav!=='N'?(fav==='A'?fp.A-fp.B:fp.B-fp.A):null;
  const ai=aiCached(r.ev.id);let k=null,type='pass',src='marché';
- if(ai&&ai.j){if(ai.j.no_bet){type='pass';src=ai.deep?'grosse analyse IA':'analyse IA'}else if(ai.j.pick){const sd=sideOf(r,ai.j.pick.marche||'');if(sd&&r.best[sd]){k=sd;type='ia';src=ai.deep?'grosse analyse IA':'analyse IA'}}}
- const vb=r.val.find(x=>x.k!==fav&&x.ev>.02&&x.p>=.22&&x.price<=10);
+ if(ai&&ai.j){if(ai.j.no_bet){type='pass';src=ai.deep?'grosse analyse IA':'analyse IA'}else if(ai.j.pick){const sd=sideOf(r,ai.j.pick.marche||'');if(sd&&RB(sd)){k=sd;type='ia';src=ai.deep?'grosse analyse IA':'analyse IA'}}}
+ // Un outsider doit mériter sa place : vraie marge (plus la cote est haute, plus il en faut), chances réelles, forme et marché pas contre lui
+ const need=x=>.04+.015*Math.max(0,x-2.5);
+ const dogs=r.keys.filter(x=>x!==fav).map(x=>{const b=RB(x);if(!b)return null;const ev=r.p[x]*b.price-1,fx=fd==null||x==='N'?0:-fd;
+  const ok=b.price<=8&&r.p[x]>=(x==='N'?.26:.28)&&ev>=need(b.price)&&MV(x)<.05&&fx>=-.25;return ok?{k:x,ev,p:r.p[x],b,score:ev+(MV(x)<=-.04?.03:0)+fx*.05}:null}).filter(Boolean).sort((a,b)=>b.score-a.score);
+ const dg=dogs[0];
  if(!k&&src==='marché'){
-  if(pf>=.6&&ef>=-.03&&!drift&&!(vb&&vb.ev-ef>.06)){k=fav;type=pf>=.72?'solide':'favori'}
-  else if(vb){k=vb.k;type=vb.k==='N'?'nul':'outsider'}
+  const favOk=pf>=.6&&ef>=-.035&&!drift;
+  if(favOk&&!(dg&&dg.ev>=.08&&dg.p>=.33&&ef<0)){k=fav;type=pf>=.72&&(fd==null||fd>-.25)?'solide':(fd!=null&&fd<-.3&&pf<.68)?'prudent':'favori'}
+  else if(dg){k=dg.k;type=dg.k==='N'?'nul':'outsider'}
+  else if(drift&&fav!=='N'&&MV(opp)<=-.04&&E(opp)>=0&&r.p[opp]>=.3&&RB(opp)){k=opp;type='bascule'}
   else if(ef>.02&&pf>=.45&&!drift){k=fav;type='value'}
-  else if(pf>=.52&&ef>=-.04&&!drift){k=fav;type='prudent'}}
- const N=x=>esc(nameOf(r,x)),p=k?r.p[k]:pf,b=k?r.best[k]:r.best[fav],ev=k?E(k):ef,P=x=>pct(x),V=x=>(x>0?'+':'')+fmt(x*100,1)+' %';
- const T={solide:['Favori solide','p-ok'],favori:['Favori jouable','p-ok'],value:['Favori sous-coté','p-ok'],outsider:['Outsider à value','p-dog'],nul:['Nul à value','p-dog'],prudent:['Prudence','p-warn'],ia:['Validé par l’IA','p-ok'],pass:['Pas de pari','p-bad']}[type];
+  else if(pf>=.52&&ef>=-.045&&!drift){k=fav;type='prudent'}}
+ const N=x=>esc(nameOf(r,x)),p=k?r.p[k]:pf,b=k?RB(k):RB(fav),ev=k?E(k):ef,P=x=>pct(x),V=x=>(x>0?'+':'')+fmt(x*100,1)+' %',kk=k||fav;
+ const T={solide:['Favori solide','p-ok'],favori:['Favori jouable','p-ok'],value:['Favori sous-coté','p-ok'],outsider:['Outsider à value','p-dog'],bascule:['Le marché bascule','p-dog'],nul:['Nul à value','p-dog'],prudent:['Prudence','p-warn'],ia:['Validé par l’IA','p-ok'],pass:['Pas de pari','p-bad']}[type];
  let why;
- if(type==='solide')why=`Favori net (${P(p)}) et payé au juste prix${ev>0?', même avec de la value ('+V(ev)+')':''}.`;
- else if(type==='favori')why=`Favori (${P(p)}) au bon prix, mais pas imperdable : mise normale, pas plus.`;
- else if(type==='value')why=`Pas un gros favori (${P(p)}), mais sa cote paie plus que son vrai risque : value ${V(ev)}.`;
- else if(type==='outsider')why=`Le favori ${N(fav)} est trop cher. ${N(k)} à ${fmt(b.price)} paie plus que son vrai risque (${P(p)}) : value ${V(ev)}. Petite mise.`;
- else if(type==='nul')why=`Match serré : le nul à ${fmt(b.price)} est mal coté par les bookmakers (${P(p)} de chances réelles) : value ${V(ev)}.`;
- else if(type==='prudent')why=`Léger favori (${P(p)}) sans value : mise réduite${r.hasDraw?' ou double chance':''}, sinon passe.`;
- else if(type==='ia')why=`L’${src} (recherche web : compos, blessures, enjeu) choisit ce pari.${ai.j.pick.proba?' Proba estimée '+P(ai.j.pick.proba)+'.':''}`;
- else why=src!=='marché'?`L’${src} a regardé compos, blessures et forme : rien d’assez solide.`:drift?`Le marché lâche ${N(fav)} (cote ${fmt(r.move[fav].from)} → ${fmt(r.move[fav].to)}) et aucun outsider n’a de value : on évite.`:pf<.52?`Match trop serré (favori à ${P(pf)}) et aucune cote ne paie assez le risque.`:`${N(fav)} (${P(pf)}) est trop cher à ${r.best[fav]?fmt(r.best[fav].price):'—'} et aucun outsider n’a de value.`;
- // Les raisons détaillées (fiche du match)
+ if(type==='solide')why=`Favori net (${P(p)}) et payé au juste prix${ev>0?' avec de la value ('+V(ev)+')':''}.`;
+ else if(type==='favori')why=`Favori (${P(p)}) au bon prix, mais pas imperdable : mise normale.`;
+ else if(type==='value')why=`Pas un gros favori (${P(p)}), mais sa cote paie plus que son vrai risque (${V(ev)}).`;
+ else if(type==='outsider')why=`${N(k)} a ${P(p)} de chances réelles et sa cote ${fmt(b.price)} les paie trop bien (${V(ev)}), alors que ${N(fav)} est ${ef<0?'trop cher':'juste au prix'}. Petite mise.`;
+ else if(type==='bascule')why=`Le marché lâche ${N(fav)} (${fmt(r.move[fav].from)} → ${fmt(r.move[fav].to)}) et l’argent rentre sur ${N(k)} (${fmt(r.move[k].from)} → ${fmt(r.move[k].to)}) : souvent une info (compo, blessure). Cote encore au-dessus du juste prix (${V(ev)}). Petite mise.`;
+ else if(type==='nul')why=`Match fermé : le nul a ${P(p)} de chances réelles et sa cote ${fmt(b.price)} les paie trop bien (${V(ev)}).`;
+ else if(type==='prudent')why=fd!=null&&fd<-.3?`${N(kk)} est favori (${P(p)}) mais sur une mauvaise série face à un adversaire en forme : mise réduite.`:`Léger favori (${P(p)}) sans value : mise réduite${r.hasDraw?' ou double chance':''}, sinon passe.`;
+ else if(type==='ia')why=`L’${src} (compos, blessures, enjeu, recherche web) choisit ce pari${ai.j.pick.proba?' : proba estimée '+P(ai.j.pick.proba):''}.`;
+ else why=src!=='marché'?`L’${src} a vérifié compos, blessures et forme : rien d’assez solide.`:drift?`Le marché lâche ${N(fav)} (${fmt(r.move[fav].from)} → ${fmt(r.move[fav].to)}) et aucun outsider n’a assez de marge : on évite.`:pf<.52?`Match trop serré (favori à ${P(pf)}) et aucune cote ne paie assez le risque.`:`${N(fav)} (${P(pf)}) est trop cher et l’outsider n’a pas assez de marge.`;
+ // Facteur en plus (forme, argent, nul) pour une phrase d'analyse complète
+ const sup=[];
+ if(k&&type!=='bascule'&&MV(k)<=-.04)sup.push(`L’argent rentre dessus (${fmt(r.move[k].from)} → ${fmt(r.move[k].to)}).`);
+ if(fd!=null&&k&&k!=='N'){const d=k===fav?fd:-fd;if(d>=.2)sup.push('Il est aussi en meilleure forme.');else if(d<=-.2&&type!=='prudent')sup.push('Attention : sa forme récente est moins bonne.')}
+ if(r.hasDraw&&k&&k!=='N'&&r.p.N>=.27)sup.push(`Piège : le nul à ${P(r.p.N)}.`);
+ if(r.conf<45)sup.push('Bookmakers pas d’accord entre eux : prudence.');
+ if(sup.length)why+=' '+sup.slice(0,2).join(' ');
  const R=[],fc=form?{A:fForm(form.A),B:fForm(form.B)}:null;
- if(b)R.push(`<b>${N(k||fav)}</b> : ${P(p)} de chances réelles, donc cote juste ${fmt(1/Math.max(.01,p))}. Meilleure cote ${fmt(b.price)} chez ${esc(b.book)} → ${ev>=0?'<b class="up">value '+V(ev)+'</b>':'<b class="down">'+fmt(-ev*100,1)+' % sous le juste prix</b>'}.`);
- if(k&&k!==fav)R.push(`Le favori ${N(fav)} (${P(pf)}) est payé ${r.best[fav]?fmt(r.best[fav].price):'—'} : ${ef<0?'value '+V(ef)+', trop cher pour ce qu’il rapporte':'value '+V(ef)}.`);
- [k||fav,fav].filter((x,i,a)=>a.indexOf(x)===i).forEach(x=>{const m=r.move[x];if(m&&Math.abs(m.d)>=.03)R.push(m.d<0?`L’argent rentre sur ${N(x)} : cote ${fmt(m.from)} → ${fmt(m.to)} depuis l’ouverture.`:`Le marché lâche ${N(x)} : cote ${fmt(m.from)} → ${fmt(m.to)}. Quelque chose a pu changer (compo, blessure).`)});
- if(r.hasDraw&&k!=='N'&&r.p.N>=.27)R.push(`Le nul pèse ${P(r.p.N)} : c’est le piège principal de ce match.`);
+ if(b)R.push(`<b>${N(kk)}</b> : ${P(p)} de chances réelles (consensus de ${r.n} bookmakers sans leur marge), donc cote juste ${fmt(1/Math.max(.01,p))}. Cote dispo ${fmt(b.price)} chez ${esc(b.book)} → ${ev>=0?'<b class="up">value '+V(ev)+'</b>':'<b class="down">'+fmt(-ev*100,1)+' % sous le juste prix</b>'}.`);
+ r.keys.filter(x=>x!==kk).forEach(x=>{const bx=RB(x);if(bx)R.push(`${N(x)} : ${P(r.p[x])}, cote ${fmt(bx.price)} → ${E(x)>=0?'value '+V(E(x)):fmt(-E(x)*100,1)+' % sous le juste prix'}${x!=='N'&&x!==fav&&E(x)>0&&E(x)<need(bx.price)?' (pas assez de marge pour un outsider à cette cote)':''}.`)});
+ [kk,fav].filter((x,i,a)=>a.indexOf(x)===i).forEach(x=>{const m=r.move[x];if(m&&Math.abs(m.d)>=.03)R.push(m.d<0?`L’argent rentre sur ${N(x)} : ${fmt(m.from)} → ${fmt(m.to)} depuis l’ouverture.`:`Le marché lâche ${N(x)} : ${fmt(m.from)} → ${fmt(m.to)}. Quelque chose a pu changer (compo, blessure).`)});
  if(fc&&fc.A&&fc.B)R.push(`Forme sur 5 matchs : ${esc(r.H)} ${fc.A.V}V ${fc.A.N}N ${fc.A.D}D · ${esc(r.A)} ${fc.B.V}V ${fc.B.N}N ${fc.B.D}D.`);
- if(r.conf<45)R.push(`Les bookmakers ne sont pas d’accord entre eux (confiance ${r.conf} %) : prudence, l’info n’est pas encore claire.`);
- else if(r.conf>=75)R.push(`${r.n} bookmakers d’accord entre eux (confiance ${r.conf} %) : le prix est fiable.`);
+ if(r.conf<45)R.push(`Bookmakers pas d’accord entre eux (confiance ${r.conf} %) : l’info n’est pas encore claire.`);else if(r.conf>=75)R.push(`${r.n} bookmakers d’accord (confiance ${r.conf} %) : le prix est fiable.`);
  if(ai&&ai.j&&ai.j.resume)R.push(`IA : ${esc(String(ai.j.resume).split(/(?<=\.)\s/)[0])}`);
+ else R.push('Pour les compos, blessures et l’enjeu du match, lance l’analyse IA : elle peut confirmer ou changer ce verdict.');
  return{k,type,title:T[0],cls:T[1],why,reasons:R,p,ev,b,src,fav}}
 function verdictHtml(V,r){return `<div class="sec glass pad vbox"><div class="row"><h3>Verdict Arisebet</h3><span class="pill ${V.cls}">${V.title}</span></div>
  <div class="big" style="font-size:22px;margin-top:6px">${V.k?esc(nameOf(r,V.k))+(V.b?' @'+fmt(V.b.price):''):'On ne joue pas ce match'}</div>
- <p style="margin:6px 0 0">${V.why}</p>${V.k?`<p class="small mute" style="margin:4px 0 0">Mise conseillée : ${V.type==='outsider'||V.type==='nul'?fmt(dogStake(V.p,V.b.price)):fmt(stake(V.p,V.b.price).v)} € · ne la prends pas sous ${fmt(Math.max(1.01,.97/V.p))}.</p>`:''}
+ <p style="margin:6px 0 0">${V.why}</p>${V.k?`<p class="small mute" style="margin:4px 0 0">Mise conseillée : ${V.type==='outsider'||V.type==='nul'||V.type==='bascule'?fmt(dogStake(V.p,V.b.price)):fmt(stake(V.p,V.b.price).v)} € · ne la prends pas sous ${fmt(Math.max(1.01,.97/V.p))}.</p>`:''}
  <ul class="vlist">${V.reasons.map(x=>`<li>${x}</li>`).join('')}</ul></div>`}
 
 /* ============ SCORES EN DIRECT ============ */
