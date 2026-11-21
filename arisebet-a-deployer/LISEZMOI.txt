@@ -1,0 +1,72 @@
+ARISEBET v3 : MISE EN LIGNE (10 minutes)
+========================================
+
+CE QU'IL Y A DANS CE DOSSIER
+- index.html ............ la nouvelle app
+- manifest.webmanifest + icônes ... pour installer l'app sur téléphone
+- package.json .......... sert au cache partagé (Netlify l'installe tout seul)
+- netlify/functions/odds.mjs ....... NOUVEAU : les cotes avec TA clé, partagées entre tous tes clients
+- netlify/functions/ai-analyze.mjs . NOUVEAU : l'analyse IA (match, ticket, chat)
+- netlify/functions/ai-deep.mjs .... NOUVEAU : la grosse analyse (lancement + suivi)
+- netlify/functions/ai-deep-run.mjs  NOUVEAU : la grosse analyse en arrière-plan (10 recherches, note /20)
+- netlify/functions/lib/ai-common.mjs : partagé par les analyses IA + CONTRÔLE AUTOMATIQUE des réponses
+  (cotes réelles, value recalculée, règles de sécurité : 55 % mini, value −4 % mini)
+- netlify/functions/lib/espn.mjs ... NOUVEAU : derniers résultats officiels ESPN donnés à l'IA
+- netlify/functions/daily.mjs ...... NOUVEAU : tâche automatique 4 fois par jour
+- netlify/functions/daily-run.mjs .. NOUVEAU : combiné du jour + vérification des résultats de l'IA
+- netlify/functions/track.mjs ...... NOUVEAU : le bilan public de l'IA affiché dans l'app
+- netlify/functions/lib/market.mjs . NOUVEAU : calcul des probabilités côté serveur
+- netlify/functions/account.mjs .... NOUVEAU : connexion par e-mail + mot de passe (en plus de Google).
+  Mots de passe chiffrés (scrypt), comptes gardés dans Netlify Blobs, rien à configurer.
+- netlify/functions/auth.js et lib/access.js : tes fichiers actuels, pas modifiés
+
+ÉTAPE 1 : DEUX CLÉS À AJOUTER SUR NETLIFY
+Sur app.netlify.com > ton site > Site configuration > Environment variables > Add a variable.
+Laisse "Functions" coché à chaque fois.
+
+  ODDS_API_KEY       = ta clé the-odds-api.com (celle que tu utilises déjà)
+  ANTHROPIC_API_KEY  = ta clé IA (console.anthropic.com > API Keys > Create Key, commence par sk-ant-)
+
+Sur console.anthropic.com, ajoute un moyen de paiement et mets une limite de dépense
+mensuelle (Billing > Limits), par exemple 20 $.
+
+ÉTAPE 2 : METTRE LES FICHIERS EN LIGNE
+1. Sur GitHub, ouvre ton dépôt arisebet-site, puis le dossier arisebet-a-deployer.
+2. "Add file" > "Upload files" : glisse TOUT le contenu de ce dossier.
+3. "Commit changes". Netlify remet le site en ligne tout seul en 1 à 2 minutes.
+
+LE COMBINÉ DU JOUR ET LE BILAN DE L'IA
+- Ils tournent tout seuls 4 fois par jour (8h, 13h, 18h, 23h, heure de Paris en hiver).
+- Le combiné du jour est créé le matin. S'il n'y a pas assez de matchs solides, l'app affiche
+  "pas de combiné" : c'est voulu, ne pas jouer fait aussi gagner.
+- Le bilan compte TOUS les picks de l'IA, gagnés comme perdus : c'est ce qui donne confiance à tes clients.
+- Ça ne marche que sur la version publiée du site (pas sur les aperçus Netlify).
+
+ÉTAPE 3 : VÉRIFIER
+1. Ouvre ton site, connecte-toi avec Google ou crée un compte avec ton e-mail : les vrais matchs apparaissent.
+   Google : l'adresse du site doit être dans « Authorized JavaScript origins » de ton ID client Google (déjà fait pour arisebetisback.netlify.app).
+   Pour débloquer l'accès, le client paie avec LA MÊME adresse e-mail que son compte.
+2. Ouvre un match > "Lancer l'analyse IA complète".
+3. Sur téléphone : menu du navigateur > "Ajouter à l'écran d'accueil".
+
+RÉGLAGES OPTIONNELS (même écran que l'étape 1)
+  ODDS_CACHE_MIN         durée du cache des cotes, en minutes (10 par défaut)
+  AI_DAILY_LIMIT         analyses de match IA par client et par jour (15)
+  AI_TICKET_DAILY_LIMIT  tickets scannés par client et par jour (10)
+  AI_CHAT_DAILY_LIMIT    questions au chat par client et par jour (30)
+  AI_MODEL               modèle IA (claude-sonnet-5-5 par défaut)
+  AI_DEEP_DAILY_LIMIT    grosses analyses par client et par jour (6)
+  AI_DEEP_MODEL          modèle de la grosse analyse (claude-sonnet-5-5 ; claude-opus-5-5 = encore plus fin, ~2× plus cher)
+  DAILY_COMPS            compétitions pour le combiné du jour, séparées par des virgules
+                         (défaut : Ligue 1, Premier League, Liga, Serie A, Bundesliga,
+                          Ligue des champions, NBA, NHL)
+
+COMBIEN ÇA COÛTE
+- IA : environ 0,10 à 0,15 $ par analyse rapide, 0,25 à 0,40 $ par grosse analyse. Une analyse de match est partagée entre
+  tous les clients pendant 3 heures : si 20 clients ouvrent Nice – PSG, tu paies 1 fois.
+- Combiné du jour : environ 8 requêtes de cotes et 1 analyse IA par jour, plus 2 requêtes
+  par sport pour vérifier les résultats à chaque passage.
+- Cotes : 1 requête The Odds API par compétition toutes les 10 minutes au maximum,
+  quel que soit le nombre de clients. Plus/moins et handicaps : 2 requêtes par match,
+  gardées 15 minutes. Si tu as beaucoup de clients, prends un forfait The Odds API payant.
+- Ton offre est à 16 € à vie : garde les limites par jour pour ne pas perdre d'argent.

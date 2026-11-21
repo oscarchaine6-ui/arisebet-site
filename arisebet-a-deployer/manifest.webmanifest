@@ -1,0 +1,15 @@
+{
+  "name": "Arisebet",
+  "short_name": "Arisebet",
+  "description": "Analyse de paris sportifs : vraies cotes, probabilités réelles et IA.",
+  "lang": "fr",
+  "start_url": "/#dash",
+  "display": "standalone",
+  "background_color": "#1d0e0a",
+  "theme_color": "#1d0e0a",
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
